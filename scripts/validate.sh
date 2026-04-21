@@ -12,6 +12,9 @@ docker run --rm "$image_name" sh -lc '
   echo "notebook: $(python -c "import notebook; print(notebook.__version__)")"
   echo "h11: $(python -c "import h11; print(h11.__version__)")"
   echo "urllib3: $(python -c "import urllib3; print(urllib3.__version__)")"
+  echo "playwright: $(python -m playwright --version)"
+  echo "chromium dirs: $(find /ms-playwright -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)"
+  echo "nitro-ai-judge: $(python -m pip show jupyterlab-nitro-ai-judge >/dev/null 2>&1 && echo installed || echo missing)"
   echo "sudo package: $(dpkg-query -W -f="\${Version}" sudo 2>/dev/null || echo not-installed)"
 '
 

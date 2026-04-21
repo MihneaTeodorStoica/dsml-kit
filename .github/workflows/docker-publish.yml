@@ -6,9 +6,12 @@ on:
       - main
     tags:
       - 'v*'
+  schedule:
+    - cron: '0 4 * * 1'
   workflow_dispatch:
 
 env:
+  BASE_IMAGE: python:3.11-slim-bookworm
   IMAGE_NAME: docker.io/mihneateodorstoica/dsml-kit
   UV_IMAGE: ghcr.io/astral-sh/uv:latest
 
@@ -40,7 +43,7 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
-            type=sha
+            type=raw,value={{date 'YYYY-MM-DD'}}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -48,6 +51,7 @@ jobs:
           context: .
           push: true
           build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
             UV_IMAGE=${{ env.UV_IMAGE }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
