@@ -6,7 +6,7 @@ SHELL := /usr/bin/bash
 IMAGE_NAME ?= dsml-kit
 CONTAINER_NAME ?= dsml
 IMAGE_REF ?= docker.io/mihneateodorstoica/dsml-kit:latest
-BASE_IMAGE ?= dhi.io/python:3.11-debian13-sfw-ent-dev
+BASE_IMAGE ?= python:3.11-slim-bookworm
 BUILD_FILES := Dockerfile .dockerignore config/bashrc requirements.txt Makefile
 
 .PHONY: help build run shell clean publish validate

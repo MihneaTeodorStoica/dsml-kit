@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=dhi.io/python:3.11-debian13-sfw-ent-dev
+ARG BASE_IMAGE=python:3.11-slim-bookworm
 
 FROM ${BASE_IMAGE}
 LABEL org.opencontainers.image.title="dsml-kit" \
