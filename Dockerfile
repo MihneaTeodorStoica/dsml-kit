@@ -28,8 +28,8 @@ RUN apt-get update && \
     apt-get install --yes --no-install-recommends bash bash-completion ca-certificates less locales passwd procps tini && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     locale-gen en_US.UTF-8 && \
-    groupadd --gid "${NB_GID}" "${NB_USER}" && \
-    useradd --uid "${NB_UID}" --gid "${NB_GID}" --create-home --shell /bin/bash "${NB_USER}" && \
+    getent group "${NB_GID}" >/dev/null || groupadd --gid "${NB_GID}" "${NB_USER}" && \
+    id -u "${NB_USER}" >/dev/null 2>&1 || useradd --uid "${NB_UID}" --gid "${NB_GID}" --create-home --shell /bin/bash "${NB_USER}" && \
     mkdir -p "${HOME}/work/.playwright" && \
     python -m pip install --no-cache-dir --upgrade \
       'Brotli==1.2.0' \
