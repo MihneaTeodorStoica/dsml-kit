@@ -10,5 +10,4 @@ nbformat==5.10.4
 notebook==7.5.5
 traitlets==5.14.3
 pyright
-python-language-server
 python-lsp-server
