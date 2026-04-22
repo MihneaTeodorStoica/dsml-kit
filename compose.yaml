@@ -1,0 +1,18 @@
+services:
+  app:
+    image: "${IMAGE:?IMAGE is required}:${TAG:-latest}"
+    container_name: "${CONTAINER:-dsml}"
+    build:
+      context: "${BUILD_CONTEXT:-.}"
+      dockerfile: "${DOCKERFILE:-Dockerfile}"
+    init: true
+    stdin_open: true
+    tty: true
+    ports:
+      - "${HOST_PORT:-8888}:${CONTAINER_PORT:-8888}"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
