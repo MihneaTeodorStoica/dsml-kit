@@ -1,0 +1,1 @@
+FROM quay.io/jupyter/minimal-notebook:python-3.11
