@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=python:3.11-slim-bookworm@sha256:4dccdf4c57bcf3e1fe4c8323fb3386b830de328954894ebd3580f1e02fbbd22e
+ARG BASE_IMAGE=dhi.io/python:3.11-debian13-sfw-ent-dev
 
 FROM ${BASE_IMAGE}
 LABEL org.opencontainers.image.title="dsml-kit" \
@@ -25,9 +25,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     SHELL=/bin/bash
 
 RUN apt-get update && \
-    apt-get install --yes --no-install-recommends bash bash-completion ca-certificates less locales procps tini && \
+    apt-get install --yes --no-install-recommends bash bash-completion ca-certificates less locales passwd procps tini && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     locale-gen en_US.UTF-8 && \
+    groupadd --gid "${NB_GID}" "${NB_USER}" && \
     useradd --uid "${NB_UID}" --gid "${NB_GID}" --create-home --shell /bin/bash "${NB_USER}" && \
     mkdir -p "${HOME}/work/.playwright" && \
     python -m pip install --no-cache-dir --upgrade \
@@ -85,7 +86,9 @@ import playwright
 
 driver_node = Path(playwright.__file__).resolve().parent / "driver" / "node"
 subprocess.run([str(driver_node), "--version"], check=True)
-Path("/usr/local/bin/node").symlink_to(driver_node)
+node_symlink = Path("/usr/local/bin/node")
+node_symlink.parent.mkdir(parents=True, exist_ok=True)
+node_symlink.symlink_to(driver_node)
 PY
 
 WORKDIR ${HOME}/work

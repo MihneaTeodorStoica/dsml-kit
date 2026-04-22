@@ -6,7 +6,7 @@ SHELL := /usr/bin/bash
 IMAGE_NAME ?= dsml-kit
 CONTAINER_NAME ?= dsml
 IMAGE_REF ?= docker.io/mihneateodorstoica/dsml-kit:latest
-BASE_IMAGE ?= python:3.11-slim-bookworm@sha256:4dccdf4c57bcf3e1fe4c8323fb3386b830de328954894ebd3580f1e02fbbd22e
+BASE_IMAGE ?= dhi.io/python:3.11-debian13-sfw-ent-dev
 BUILD_FILES := Dockerfile .dockerignore config/bashrc requirements.txt Makefile
 
 .PHONY: help build run shell clean publish validate
@@ -16,7 +16,15 @@ repo_root="$$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$$repo_root"
 
 pull_base_image() {
-  docker pull "$(BASE_IMAGE)" >/dev/null
+  if docker pull "$(BASE_IMAGE)" >/dev/null; then
+    return 0
+  fi
+
+  if [[ "$(BASE_IMAGE)" == dhi.io/* ]]; then
+    printf '%s\n' 'Failed to pull Docker Hardened Image. Run: docker login dhi.io'
+  fi
+
+  return 1
 }
 
 compute_build_hash() {
