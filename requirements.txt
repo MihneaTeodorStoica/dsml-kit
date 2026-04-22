@@ -1,1 +1,1 @@
-jupyterlab-nitro-ai-judge
+jupyterlab-nitro-ai-judge==0.1.10
