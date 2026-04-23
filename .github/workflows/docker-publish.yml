@@ -61,11 +61,7 @@ jobs:
           provenance: mode=max
           sbom: true
 
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-path: .
-          push-to-registry: true
+
 
       - name: Run Docker Scout
         uses: docker/scout-action@v1

@@ -34,11 +34,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=docker-image
           provenance: mode=min
 
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-path: .
-          push-to-registry: false
+
 
       - name: Run Docker Scout
         uses: docker/scout-action@v1
