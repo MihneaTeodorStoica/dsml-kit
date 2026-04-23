@@ -37,7 +37,7 @@ The container exposes Jupyter on port `8888` by default.
 
 `compose.yaml` supports a few environment overrides:
 
-- `IMAGE`: image name, default `docker.io/mihneateodorstoica/dsml-kit`
+- `IMAGE`: image name, default `ghcr.io/mihneateodorstoica/dsml-kit`
 - `TAG`: image tag, default `latest`
 - `CONTAINER`: container name, default `dsml`
 - `BUILD_CONTEXT`: build context, default `.`
@@ -72,7 +72,7 @@ If your machine does not have NVIDIA GPU support configured, you may need to adj
 - `make run`: start the stack in the background and follow app logs
 - `make clean`: stop the stack and remove the configured image tag
 - `make validate`: build and run `docker scout` checks
-- `make publish`: build, tag with today's date, and push the image
+- `make publish`: build, tag with today's date, and push the image to GHCR
 
 ## Installed Packages
 

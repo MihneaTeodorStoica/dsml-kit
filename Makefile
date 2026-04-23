@@ -1,6 +1,6 @@
 .PHONY: build run clean validate publish
 
-IMAGE ?= docker.io/mihneateodorstoica/dsml-kit
+IMAGE ?= ghcr.io/mihneateodorstoica/dsml-kit
 TAG ?= latest
 DATE_TAG := $(shell date +%F)
 

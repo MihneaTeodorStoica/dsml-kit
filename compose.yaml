@@ -1,7 +1,7 @@
 name: dsml-kit
 
 x-app-defaults: &app-defaults
-  image: "${IMAGE:-docker.io/mihneateodorstoica/dsml-kit}:${TAG:-latest}"
+  image: "${IMAGE:-ghcr.io/mihneateodorstoica/dsml-kit}:${TAG:-latest}"
   container_name: "${CONTAINER:-dsml}"
   build:
     context: "${BUILD_CONTEXT:-.}"

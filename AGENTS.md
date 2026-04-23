@@ -15,12 +15,12 @@
 - Run the workspace with `make run`. This does `docker compose up --build -d`, clears the terminal, then attaches to `docker compose logs -f app`.
 - Stop and remove local artifacts with `make clean`.
 - Local image validation is `make validate`, which first builds and then runs `docker scout quickview` and `docker scout cves`. This is heavier than CI and requires Docker Scout locally.
-- Publish manually with `make publish`. It tags `docker.io/mihneateodorstoica/dsml-kit` with today's date and `latest`, then pushes both.
+- Publish manually with `make publish`. It tags `ghcr.io/mihneateodorstoica/dsml-kit` with today's date and `latest`, then pushes both.
 
 ## CI / Verification
 
 - CI in `.github/workflows/validate.yml` only verifies that the image builds with `docker/build-push-action`; it does not run `docker scout`.
-- Release publishing in `.github/workflows/docker-publish.yml` pushes to both Docker Hub (`docker.io/mihneateodorstoica/dsml-kit`) and GHCR (`ghcr.io/<repo>`), with tags from default-branch `latest`, Git tags, and the current date.
+- Release publishing in `.github/workflows/docker-publish.yml` pushes to GHCR (`ghcr.io/<repo>`) with tags from default-branch `latest`, Git tags, and the current date.
 
 ## Runtime Gotchas
 
