@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   validate:
@@ -23,6 +24,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -30,3 +32,5 @@ jobs:
           tags: dsml-kit:validate
           cache-from: type=gha,scope=docker-image
           cache-to: type=gha,mode=max,scope=docker-image
+          provenance: mode=min
+

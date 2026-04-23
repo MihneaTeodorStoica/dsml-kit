@@ -49,6 +49,7 @@ jobs:
             type=raw,value={{date 'YYYY-MM-DD'}}
 
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -59,3 +60,6 @@ jobs:
           cache-to: type=gha,mode=max,scope=docker-image
           provenance: mode=max
           sbom: true
+
+
+
