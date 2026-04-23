@@ -22,22 +22,22 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-       - name: Build image
-         id: build
-         uses: docker/build-push-action@v6
-         with:
-           context: .
-           push: false
-           tags: dsml-kit:validate
-           cache-from: type=gha,scope=docker-image
-           cache-to: type=gha,mode=max,scope=docker-image
-           provenance: mode=min
+      - name: Build image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: dsml-kit:validate
+          cache-from: type=gha,scope=docker-image
+          cache-to: type=gha,mode=max,scope=docker-image
+          provenance: mode=min
 
-       - name: Attest build provenance
-         uses: actions/attest-build-provenance@v1
-         with:
-           image-ref: dsml-kit:validate
-           push-to-registry: false
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: .
+          push-to-registry: false
 
       - name: Run Docker Scout
         uses: docker/scout-action@v1
