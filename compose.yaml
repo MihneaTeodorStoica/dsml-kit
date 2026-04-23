@@ -1,21 +1,26 @@
+name: dsml-kit
+
+x-app-defaults: &app-defaults
+  image: "${IMAGE:-docker.io/mihneateodorstoica/dsml-kit}:${TAG:-latest}"
+  container_name: "${CONTAINER:-dsml}"
+  build:
+    context: "${BUILD_CONTEXT:-.}"
+    dockerfile: "${DOCKERFILE:-Dockerfile}"
+  stdin_open: true
+  tty: true
+  ports:
+    - "${HOST_PORT:-8888}:${CONTAINER_PORT:-8888}"
+  command:
+    - start-notebook.py
+    - --Application.log_level=CRITICAL
+    - --ServerApp.log_level=CRITICAL
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            capabilities: [gpu]
+
 services:
   app:
-    image: "${IMAGE:?IMAGE is required}:${TAG:-latest}"
-    container_name: "${CONTAINER:-dsml}"
-    build:
-      context: "${BUILD_CONTEXT:-.}"
-      dockerfile: "${DOCKERFILE:-Dockerfile}"
-    stdin_open: true
-    tty: true
-    ports:
-      - "${HOST_PORT:-8888}:${CONTAINER_PORT:-8888}"
-    command:
-      - start-notebook.py
-      - --Application.log_level=CRITICAL
-      - --ServerApp.log_level=CRITICAL
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              capabilities: [gpu]
+    <<: *app-defaults
