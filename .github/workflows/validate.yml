@@ -34,25 +34,3 @@ jobs:
           cache-to: type=gha,mode=max,scope=docker-image
           provenance: mode=min
 
-      - name: Run Docker Scout
-        uses: docker/scout-action@v1
-        with:
-          command: quickview
-          image: dsml-kit:validate
-        env:
-          SCOUT_AUTH: ${{ secrets.DOCKER_SCOUT_TOKEN }}
-
-      - name: Run Docker Scout CVEs
-        uses: docker/scout-action@v1
-        with:
-          command: cves
-          image: dsml-kit:validate
-          format: sarif
-          output: cves.sarif
-        env:
-          SCOUT_AUTH: ${{ secrets.DOCKER_SCOUT_TOKEN }}
-
-      - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: cves.sarif
