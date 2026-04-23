@@ -1,24 +1,35 @@
-.PHONY: build run clean validate publish
+.PHONY: build run logs shell stop clean validate publish token
 
-IMAGE ?= ghcr.io/mihneateodorstoica/dsml-kit
-TAG ?= latest
+IMAGE := ghcr.io/mihneateodorstoica/dsml-kit:latest
 DATE_TAG := $(shell date +%F)
 
 build:
-	docker compose build --pull
+	docker compose build
 
-run:
-	@docker compose up --build -d && clear && docker compose logs -f app
+run: token
+	JUPYTER_TOKEN=$$(cat token.txt) docker compose up --build
+
+logs:
+	docker compose logs -f app
+
+shell:
+	docker compose exec app bash
+
+stop:
+	-docker compose stop
 
 clean:
 	-docker compose down --remove-orphans
-	-docker image rm $(IMAGE):$(TAG) 2>/dev/null || true
+	-rm -f token.txt
 
 validate: build
-	docker scout quickview $(IMAGE):$(TAG)
-	docker scout cves $(IMAGE):$(TAG)
+	docker scout quickview $(IMAGE)
+	docker scout cves $(IMAGE)
 
 publish: build
-	docker image tag $(IMAGE):latest $(IMAGE):$(DATE_TAG)
-	docker image push $(IMAGE):$(DATE_TAG)
-	docker image push $(IMAGE):$(TAG)
+	docker image tag $(IMAGE) ghcr.io/mihneateodorstoica/dsml-kit:$(DATE_TAG)
+	docker image push ghcr.io/mihneateodorstoica/dsml-kit:$(DATE_TAG)
+	docker image push $(IMAGE)
+
+token:
+	@[ -f token.txt ] || (openssl rand -hex 32 > token.txt && echo "Generated token.txt")

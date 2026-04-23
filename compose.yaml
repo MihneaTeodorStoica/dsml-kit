@@ -1,26 +1,20 @@
 name: dsml-kit
 
-x-app-defaults: &app-defaults
-  image: "${IMAGE:-ghcr.io/mihneateodorstoica/dsml-kit}:${TAG:-latest}"
-  container_name: "${CONTAINER:-dsml}"
-  build:
-    context: "${BUILD_CONTEXT:-.}"
-    dockerfile: "${DOCKERFILE:-Dockerfile}"
-  stdin_open: true
-  tty: true
-  ports:
-    - "${HOST_PORT:-8888}:${CONTAINER_PORT:-8888}"
-  command:
-    - start-notebook.py
-    - --Application.log_level=CRITICAL
-    - --ServerApp.log_level=CRITICAL
-  deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            capabilities: [gpu]
-
 services:
   app:
-    <<: *app-defaults
+    image: ghcr.io/mihneateodorstoica/dsml-kit:latest
+    container_name: dsml
+    build:
+      context: .
+      dockerfile: Dockerfile
+      pull: true
+    ports:
+      - "8888:8888"
+    environment:
+      - JUPYTER_TOKEN
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
