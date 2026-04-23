@@ -31,25 +31,18 @@ Start JupyterLab with Docker Compose:
 make run
 ```
 
+`make run` creates `token.txt` if it does not already exist, exports that value as `JUPYTER_TOKEN`, and starts `docker compose up --build`.
 The container exposes Jupyter on port `8888` by default.
 
 ## Compose Configuration
 
-`compose.yaml` supports a few environment overrides:
+`compose.yaml` currently defines a single `app` service with:
 
-- `IMAGE`: image name, default `ghcr.io/mihneateodorstoica/dsml-kit`
-- `TAG`: image tag, default `latest`
-- `CONTAINER`: container name, default `dsml`
-- `BUILD_CONTEXT`: build context, default `.`
-- `DOCKERFILE`: Dockerfile path, default `Dockerfile`
-- `HOST_PORT`: host port, default `8888`
-- `CONTAINER_PORT`: container port, default `8888`
-
-Example:
-
-```bash
-HOST_PORT=9999 CONTAINER=my-dsml make run
-```
+- image `ghcr.io/mihneateodorstoica/dsml-kit:latest`
+- container name `dsml`
+- build context `.` with `Dockerfile`
+- port mapping `8888:8888`
+- optional `JUPYTER_TOKEN` passed through from the environment
 
 ## GPU Support
 
@@ -64,15 +57,19 @@ deploy:
           capabilities: [gpu]
 ```
 
-If your machine does not have NVIDIA GPU support configured, you may need to adjust `compose.yaml` before running the stack.
+If your machine does not have NVIDIA GPU support configured, you may need to remove or override the GPU reservation before running the stack.
 
 ## Make Targets
 
-- `make build`: build the Docker image with `docker compose build --pull`
-- `make run`: start the stack in the background and follow app logs
-- `make clean`: stop the stack and remove the configured image tag
-- `make validate`: build and run `docker scout` checks
-- `make publish`: build, tag with today's date, and push the image to GHCR
+- `make build`: build the Docker image with `docker compose build`
+- `make run`: ensure `token.txt` exists and run `docker compose up --build`
+- `make logs`: follow `app` service logs
+- `make shell`: open a shell in the running `app` container
+- `make stop`: stop the compose services
+- `make clean`: run `docker compose down --remove-orphans` and delete `token.txt`
+- `make validate`: build and run `docker scout quickview` and `docker scout cves`
+- `make publish`: build, tag the image with today's date, and push both the dated tag and `latest` to GHCR
+- `make token`: create `token.txt` with a random hex token if missing
 
 ## Installed Packages
 
@@ -87,5 +84,6 @@ Key packages pinned in `requirements.txt`:
 
 ## Development Notes
 
-- Dependencies are installed with `mamba` during image build.
+- Dependencies are installed from `requirements.txt` with `pip` during image build.
+- The container starts `start-notebook.py` with both `Application` and `ServerApp` log levels set to `CRITICAL`.
 - The image is intentionally minimal and centered on notebooks rather than a full application scaffold.
