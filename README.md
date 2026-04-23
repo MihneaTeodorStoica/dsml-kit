@@ -1,24 +1,21 @@
 # dsml-kit
 
-`dsml-kit` builds a Docker image for a JupyterLab-based data science and machine learning workspace.
+Containerized DS/ML workspace built on `quay.io/jupyter/minimal-notebook:python-3.11`.
+It provides a small JupyterLab-based environment with common notebook packages, `pyright`, and `python-lsp-server`.
 
-The repo is intentionally small: the main sources of truth are `Dockerfile`, `requirements.txt`, and `Makefile`.
+## What's Included
 
-## What It Includes
+- Python 3.11 via the Jupyter minimal notebook image
+- JupyterLab and notebook tooling
+- IPython and kernel packages
+- `pyright` for type checking
+- `python-lsp-server` for editor and notebook language features
 
-- Python 3.11 on Debian Bookworm slim
-- JupyterLab and Notebook
-- Playwright with Chromium installed in the image
-- A custom Node binary installed for Playwright's driver
-- The extra Python package from `requirements.txt`: `jupyterlab-nitro-ai-judge`
-- A non-root `jovyan` user with working directory `/home/jovyan/work`
-
-The container exposes JupyterLab on port `8888`.
-
-## Requirements
+## Prerequisites
 
 - Docker
-- NVIDIA Container Toolkit if you want to use the default GPU-enabled run flow
+- Docker Compose
+- NVIDIA Container Toolkit if you want GPU access
 
 ## Quick Start
 
@@ -28,98 +25,67 @@ Build the image:
 make build
 ```
 
-Start or attach to the long-lived `dsml` container:
+Start JupyterLab with Docker Compose:
 
 ```bash
 make run
 ```
 
-If your host does not support `--gpus all`, run:
+The container exposes Jupyter on port `8888` by default.
+
+## Compose Configuration
+
+`compose.yaml` supports a few environment overrides:
+
+- `IMAGE`: image name, default `ghcr.io/mihneateodorstoica/dsml-kit`
+- `TAG`: image tag, default `latest`
+- `CONTAINER`: container name, default `dsml`
+- `BUILD_CONTEXT`: build context, default `.`
+- `DOCKERFILE`: Dockerfile path, default `Dockerfile`
+- `HOST_PORT`: host port, default `8888`
+- `CONTAINER_PORT`: container port, default `8888`
+
+Example:
 
 ```bash
-make run NO_GPU=1
+HOST_PORT=9999 CONTAINER=my-dsml make run
 ```
 
-Open JupyterLab at `http://127.0.0.1:8888`.
+## GPU Support
 
-## Common Commands
+The Compose service reserves an NVIDIA GPU device by default:
 
-Build or rebuild the local image:
-
-```bash
-make build
+```yaml
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          capabilities: [gpu]
 ```
 
-Validate the image contents and optionally run an image scanner if available:
+If your machine does not have NVIDIA GPU support configured, you may need to adjust `compose.yaml` before running the stack.
 
-```bash
-make validate
-```
+## Make Targets
 
-Open an interactive shell inside the `dsml` container:
+- `make build`: build the Docker image with `docker compose build --pull`
+- `make run`: start the stack in the background and follow app logs
+- `make clean`: stop the stack and remove the configured image tag
+- `make validate`: build and run `docker scout` checks
+- `make publish`: build, tag with today's date, and push the image to GHCR
 
-```bash
-make shell
-```
+## Installed Packages
 
-Remove the persistent `dsml` container:
+Key packages pinned in `requirements.txt`:
 
-```bash
-make clean
-```
+- `jupyterlab`
+- `notebook`
+- `ipython`
+- `ipykernel`
+- `pyright`
+- `python-lsp-server`
 
-Tag and push the local image to Docker Hub, or to a custom image reference:
+## Development Notes
 
-```bash
-make publish
-make publish IMAGE_REF=docker.io/your-name/dsml-kit:tag
-```
-
-List the available targets:
-
-```bash
-make help
-```
-
-## How The Makefile Works
-
-- The Makefile switches to the repo root before building or running Docker commands.
-- The local image name is always `dsml-kit`.
-- `make run` and `make shell` reuse a fixed container name: `dsml`.
-- If the existing `dsml` container was created from an older image ID, the Makefile deletes and recreates it.
-- `make build` only rebuilds when the computed build hash changes.
-
-The build hash includes:
-
-- `Dockerfile`
-- `.dockerignore`
-- `config/bashrc`
-- `requirements.txt`
-- `Makefile`
-- `BASE_IMAGE`
-- The resolved image ID for the pinned base image
-
-## Modernization Notes
-
-- The base image is pinned by digest for reproducible rebuilds.
-- Direct Python dependencies are pinned to exact versions.
-- The image now includes a Docker `HEALTHCHECK`.
-- The Playwright Node download is checksum-verified before replacing the bundled driver binary.
-- CI publishes SBOM and provenance attestations for pushed images.
-
-## Publishing
-
-GitHub Actions publishes `docker.io/mihneateodorstoica/dsml-kit` on:
-
-- Pushes to `main`
-- Git tags matching `v*`
-- A weekly Monday schedule
-- Manual workflow dispatch
-
-Published tags include:
-
-- `latest` on the default branch
-- The Git tag name for tag builds
-- A date tag in `YYYY-MM-DD` format
-
-Pull requests are validated separately with `make validate` before merge.
+- Dependencies are installed with `mamba` during image build.
+- The image is intentionally minimal and centered on notebooks rather than a full application scaffold.

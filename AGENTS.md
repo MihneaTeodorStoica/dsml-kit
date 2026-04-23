@@ -1,41 +1,33 @@
 # AGENTS.md
 
-## Repo Shape
+## Scope
 
-- This repo builds a single Docker image for a JupyterLab notebook environment; there is no app package layout, test suite, or workspace manager.
-- The main sources of truth are `Dockerfile`, `requirements.txt`, `Makefile`, and `.github/workflows/*.yml`.
+- This repo is a single-image Docker workspace, not a Python package or monorepo. The main artifacts are `Dockerfile`, `compose.yaml`, `requirements.txt`, and the `Makefile` targets that drive them.
 
-## Core Commands
+## Source Of Truth
 
-- `make build`: build or rebuild the local `dsml-kit` image when the computed build hash changes.
-- `make validate`: best verification step after image changes. It auto-builds first, checks installed tool versions, validates the runtime healthcheck, and then runs `docker scout quickview` or `trivy image` if available on the host.
-- `make run`: start or attach to the long-lived `dsml` container and print the local Jupyter URL.
-- `make run NO_GPU=1`: same as above, but omits `--gpus all`.
-- `make shell`: open `bash -il` in the `dsml` container, creating or restarting it if needed.
-- `make clean`: remove the persistent `dsml` container.
-- `make publish IMAGE_REF=image:tag`: tag and push the local image; the default target is `docker.io/mihneateodorstoica/dsml-kit:latest`.
+- Trust `Dockerfile` over `README.md` for dependency installation details: the image currently installs `requirements.txt` with `pip`, not `mamba`.
+- Trust `compose.yaml` for runtime behavior: `make run` starts the `app` service defined there and runs `start-notebook.py` with log levels forced to `CRITICAL`.
 
-## Makefile Behavior That Is Easy To Miss
+## Commands
 
-- The Makefile executes Docker operations from the repo root before building or running containers.
-- `make build` rebuilds automatically when the computed build hash changes. The hash includes `Dockerfile`, `.dockerignore`, `config/bashrc`, `requirements.txt`, `Makefile`, `BASE_IMAGE`, and the resolved image ID for the pinned base image.
-- `make run` and `make shell` reuse a fixed container name, `dsml`. If that container exists but was created from an older image ID, the Makefile deletes and recreates it.
-- `make run` and `make shell` default to GPU mode via `--gpus all`; use `NO_GPU=1` on hosts without GPU runtime support.
+- Build the image with `make build` (`docker compose build --pull`).
+- Run the workspace with `make run`. This does `docker compose up --build -d`, clears the terminal, then attaches to `docker compose logs -f app`.
+- Stop and remove local artifacts with `make clean`.
+- Local image validation is `make validate`, which first builds and then runs `docker scout quickview` and `docker scout cves`. This is heavier than CI and requires Docker Scout locally.
+- Publish manually with `make publish`. It tags `ghcr.io/mihneateodorstoica/dsml-kit` with today's date and `latest`, then pushes both.
 
-## Image Contents
+## CI / Verification
 
-- `requirements.txt` currently adds exactly one extra Python package: `jupyterlab-nitro-ai-judge`.
-- The Docker image also installs JupyterLab, Notebook, Playwright, Chromium, and a custom Node binary for Playwright's driver.
-- The container runs as non-root user `jovyan` with working directory `/home/jovyan/work`.
+- CI in `.github/workflows/validate.yml` only verifies that the image builds with `docker/build-push-action`; it does not run `docker scout`.
+- Release publishing in `.github/workflows/docker-publish.yml` pushes to GHCR (`ghcr.io/<repo>`) with tags from default-branch `latest`, Git tags, and the current date.
 
-## CI / Release Notes
+## Runtime Gotchas
 
-- CI validates and publishes the Docker image; there is no separate lint/typecheck/test workflow.
-- `.github/workflows/docker-publish.yml` pushes on `main`, Git tags matching `v*`, a weekly Monday schedule, and manual dispatch.
-- `.github/workflows/validate.yml` runs `make validate` on pull requests and pushes to `main`.
-- Published tags come from Docker metadata action: `latest` on the default branch, the Git tag name for tag builds, and a `YYYY-MM-DD` date tag.
+- `compose.yaml` reserves an NVIDIA GPU by default via `deploy.resources.reservations.devices`. On machines without NVIDIA Container Toolkit or GPU access, expect `make run` / `docker compose up` to need a local compose edit or override.
+- The container port mapping defaults to `8888:8888`, but `IMAGE`, `TAG`, `CONTAINER`, `BUILD_CONTEXT`, `DOCKERFILE`, `HOST_PORT`, and `CONTAINER_PORT` are all overridable through environment variables.
 
-## Working Guidance
+## Dependencies
 
-- For Dockerfile or dependency edits, prefer `make validate` over ad hoc `docker build` commands so you exercise the same rebuild and runtime checks used in local development and CI.
-- Do not assume `docker run` is ephemeral in this repo; the intended local workflow centers on the persistent `dsml` container.
+- Python version intent is `3.11` from the base image `quay.io/jupyter/minimal-notebook:python-3.11`; `.python-version` is `3.11.10`.
+- Notebook and editor tooling is pinned in `requirements.txt`; update that file when changing the container toolchain.
