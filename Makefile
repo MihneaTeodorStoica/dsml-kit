@@ -20,7 +20,7 @@ build:
 	$(COMPOSE) build --pull
 
 run:
-	$(COMPOSE) up --build
+	@$(COMPOSE) up --build -d && clear && $(COMPOSE) logs -f app
 
 clean:
 	-$(COMPOSE) down --remove-orphans

@@ -5,11 +5,14 @@ services:
     build:
       context: "${BUILD_CONTEXT:-.}"
       dockerfile: "${DOCKERFILE:-Dockerfile}"
-    init: true
     stdin_open: true
     tty: true
     ports:
       - "${HOST_PORT:-8888}:${CONTAINER_PORT:-8888}"
+    command:
+      - start-notebook.py
+      - --Application.log_level=CRITICAL
+      - --ServerApp.log_level=CRITICAL
     deploy:
       resources:
         reservations:
