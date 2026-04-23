@@ -48,14 +48,40 @@ jobs:
             type=ref,event=tag
             type=raw,value={{date 'YYYY-MM-DD'}}
 
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=docker-image
-          cache-to: type=gha,mode=max,scope=docker-image
-          provenance: mode=max
-          sbom: true
+       - name: Build and push image
+         id: build
+         uses: docker/build-push-action@v6
+         with:
+           context: .
+           push: true
+           tags: ${{ steps.meta.outputs.tags }}
+           labels: ${{ steps.meta.outputs.labels }}
+           cache-from: type=gha,scope=docker-image
+           cache-to: type=gha,mode=max,scope=docker-image
+           provenance: mode=max
+           sbom: true
+
+       - name: Attest build provenance
+         uses: actions/attest-build-provenance@v1
+         with:
+           image-ref: ${{ steps.build.outputs.image }}@${{ steps.build.outputs.digest }}
+           push: true
+
+       - name: Run Docker Scout
+         uses: docker/scout-action@v1
+         with:
+           command: quickview
+           image: ${{ env.GHCR_IMAGE }}
+
+       - name: Run Docker Scout CVEs
+         uses: docker/scout-action@v1
+         with:
+           command: cves
+           image: ${{ env.GHCR_IMAGE }}
+           format: sarif
+           output: cves.sarif
+
+       - name: Upload SARIF file
+         uses: github/codeql-action/upload-sarif@v3
+         with:
+           sarif_file: cves.sarif
