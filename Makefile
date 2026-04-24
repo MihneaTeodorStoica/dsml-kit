@@ -20,7 +20,6 @@ stop:
 
 clean:
 	-docker compose down --remove-orphans
-	-rm -f token.txt
 
 validate: build
 	docker scout quickview $(IMAGE)
