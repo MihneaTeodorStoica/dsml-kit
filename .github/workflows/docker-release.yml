@@ -1,4 +1,4 @@
-name: Publish Container Image
+name: Publish Release Container Image
 
 on:
   push:
@@ -6,8 +6,6 @@ on:
       - main
     tags:
       - "v*"
-  schedule:
-    - cron: "0 4 * * *"
   workflow_dispatch:
 
 env:
@@ -46,6 +44,7 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
+            type=sha,format=short
             type=raw,value={{date 'YYYY-MM-DD'}}
 
       - name: Build and push image
@@ -60,6 +59,3 @@ jobs:
           cache-to: type=gha,mode=max,scope=docker-image
           provenance: mode=max
           sbom: true
-
-
-
