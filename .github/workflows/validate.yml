@@ -33,7 +33,7 @@ jobs:
           tags: dsml-kit:validate
           cache-from: type=gha,scope=docker-image
           cache-to: type=gha,mode=max,scope=docker-image
-          provenance: mode=min
+          provenance: false
 
       - name: Smoke test container startup
         run: |
