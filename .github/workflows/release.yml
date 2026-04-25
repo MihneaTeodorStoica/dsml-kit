@@ -1,0 +1,54 @@
+name: Generate Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to release, for example v1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: release-tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+
+          git rev-parse --verify "refs/tags/${tag}"
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        run: |
+          tag="${{ steps.release-tag.outputs.tag }}"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            printf 'Release %s already exists.\n' "$tag"
+            exit 0
+          fi
+
+          gh release create "$tag" \
+            --title "$tag" \
+            --generate-notes \
+            --verify-tag

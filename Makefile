@@ -7,10 +7,14 @@ DSML_TAG ?= latest
 DSML_MODE ?= image
 GPU_ENABLED ?= false
 WORKSPACE_DIR ?= ./workspace
-export HOST_UID ?= $(shell id -u)
-export HOST_GID ?= $(shell id -g)
 DSML_MODE_VALUE := $(strip $(DSML_MODE))
 GPU_ENABLED_VALUE := $(strip $(GPU_ENABLED))
+HOST_UID_VALUE := $(strip $(or $(HOST_UID),$(shell id -u)))
+HOST_GID_VALUE := $(strip $(or $(HOST_GID),$(shell id -g)))
+override HOST_UID := $(HOST_UID_VALUE)
+override HOST_GID := $(HOST_GID_VALUE)
+export HOST_UID
+export HOST_GID
 IMAGE := $(IMAGE_NAME):$(DSML_TAG)
 DATE_TAG := $(shell date +%F)
 COMPOSE_FILES := -f compose.yaml
