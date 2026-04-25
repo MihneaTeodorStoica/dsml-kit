@@ -1,2 +1,6 @@
 .env
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.test-workspace/
 workspace/

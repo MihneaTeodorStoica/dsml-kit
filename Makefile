@@ -1,4 +1,4 @@
-.PHONY: build build-dev pull prepare-workspace run start run-dev run-image logs shell stop clean clean-all nuke validate freeze publish env
+.PHONY: build build-dev pull prepare-workspace run start run-dev run-image logs shell stop clean clean-all nuke test validate freeze publish env
 
 -include .env
 
@@ -115,7 +115,11 @@ nuke:
 		printf "Workspace '%s' not present; nothing to delete.\n" "$$workspace"; \
 	fi
 
-validate: env
+test:
+	docker build -t dsml-kit:validate .
+	DSML_TEST_IMAGE=dsml-kit:validate DSML_TEST_IMAGE_NAME=dsml-kit DSML_TEST_TAG=validate python3 -m pytest tests
+
+validate: test env
 	@if [ "$(DSML_MODE_VALUE)" = "dev" ]; then \
 		$(COMPOSE_DEV) build; \
 		docker scout quickview $(IMAGE); \
