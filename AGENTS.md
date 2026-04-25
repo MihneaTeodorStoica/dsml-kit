@@ -1,34 +1,37 @@
 # AGENTS.md
 
-## Scope
+## Repo Shape
 
-- This repo is a single-image Docker workspace, not a Python package or monorepo. The main artifacts are `Dockerfile`, `compose.yaml`, `requirements.txt`, and the `Makefile` targets that drive them.
-
-## Source Of Truth
-
-- Trust `Dockerfile` over `README.md` for dependency installation details: the image currently installs `requirements.txt` with `pip`, not `mamba`.
-- Trust `Dockerfile` and `Makefile` together for runtime behavior: the container command runs `start-notebook.py` with log levels forced to `CRITICAL`, and `make run` injects `JUPYTER_TOKEN` from `token.txt` before starting `docker compose up --build`.
+- This is a Dockerized JupyterLab DS/ML workspace, not an installable Python app/library.
+- Runtime image starts from `quay.io/jupyter/minimal-notebook:python-3.11` and installs pinned notebook/data packages from `requirements.txt`.
+- `compose.yaml` is the published-image runtime path; `compose.dev.yaml` only adds local `Dockerfile` build config; `compose.gpu.yaml` is included only when `GPU_ENABLED=true`.
+- `workspace/` and `.env` are local runtime state and are git-ignored; do not treat them as source.
 
 ## Commands
 
-- Build the image with `make build` (`docker compose build`).
-- Run the workspace with `make run`. This ensures `token.txt` exists, exports that value as `JUPYTER_TOKEN`, and runs `docker compose up --build` in the foreground.
-- Stop and remove local artifacts with `make clean`.
-- Local image validation is `make validate`, which first builds and then runs `docker scout quickview` and `docker scout cves`. This is heavier than CI and requires Docker Scout locally.
-- Publish manually with `make publish`. It tags `ghcr.io/mihneateodorstoica/dsml-kit` with today's date and pushes both the dated tag and `latest`.
+- Install the local pytest runner with `python3 -m pip install -r requirements-dev.txt` when needed.
+- Full local smoke validation: `make test`. It builds `dsml-kit:validate` and runs `python3 -m pytest tests` with the expected `DSML_TEST_*` env vars.
+- CI validation equivalent after a separate image build: `DSML_TEST_IMAGE=dsml-kit:validate DSML_TEST_IMAGE_NAME=dsml-kit DSML_TEST_TAG=validate python3 -m pytest tests`.
+- Focus one test only after `dsml-kit:validate` exists: `DSML_TEST_IMAGE=dsml-kit:validate DSML_TEST_IMAGE_NAME=dsml-kit DSML_TEST_TAG=validate python3 -m pytest tests/test_image_smoke.py::test_image_starts_and_serves_jupyter_api`.
+- `make validate` runs `make test` plus `docker scout quickview` and `docker scout cves`; it requires Docker Scout availability and network access.
+- Start the published image path with `make run` or `make start`; force a local build/run with `make run-dev` or `DSML_MODE=dev make run`.
 
-## CI / Verification
+## Runtime And Env Gotchas
 
-- CI in `.github/workflows/validate.yml` only verifies that the image builds with `docker/build-push-action`; it does not run `docker scout`.
-- Release publishing in `.github/workflows/docker-publish.yml` pushes to GHCR (`ghcr.io/<repo>`) with tags from default-branch `latest`, Git tags, and the current date.
+- `make run`, `make start`, `make build`, `make pull`, and `make env` may create `.env`; `make env` copies `.env.example` and replaces `JUPYTER_TOKEN` with a random token.
+- `make run` and `make start` call `prepare-workspace`, which creates `WORKSPACE_DIR` and may repair ownership via a temporary BusyBox container.
+- The Makefile exports the current host UID/GID unless `HOST_UID`/`HOST_GID` are set, so Compose tests assert that files written from Jupyter are owned by the host user.
+- In `DSML_MODE=image`, `make build` intentionally skips local builds and `make pull` pulls the selected published image. In `DSML_MODE=dev`, `make build`/`make run` use `compose.dev.yaml` and `make pull` skips.
+- `make nuke` is interactive and deletes the configured workspace after the exact confirmation string; avoid it in automation.
 
-## Runtime Gotchas
+## Tests
 
-- `compose.yaml` reserves an NVIDIA GPU by default via `deploy.resources.reservations.devices`. On machines without NVIDIA Container Toolkit or GPU access, expect `make run` / `docker compose up` to need a local compose edit or override.
-- The current compose file hardcodes image `ghcr.io/mihneateodorstoica/dsml-kit:latest`, container name `dsml`, and port mapping `8888:8888`; those are not parameterized through compose environment substitutions today.
-- `make run` depends on `openssl` to generate `token.txt` when it is missing.
+- Tests require Docker and Docker Compose; they start real containers, allocate localhost ports, and call Jupyter `/api/status` with a token.
+- `tests/test_compose_runtime.py` uses `docker compose -f compose.yaml -f compose.dev.yaml up -d --no-build` with `PULL_POLICY=never`, so the referenced test image must already exist locally.
+- Import-contract tests are the package contract for the image; update both `tests/test_import_contract.py` and the duplicate import list in `tests/test_compose_runtime.py` when changing key installed packages.
 
-## Dependencies
+## Image/Build Notes
 
-- Python version intent is `3.11` from the base image `quay.io/jupyter/minimal-notebook:python-3.11`; `.python-version` is `3.11.10`.
-- Notebook and editor tooling is pinned in `requirements.txt`; update that file when changing the container toolchain.
+- `.dockerignore` excludes `.github`, `.env`, notebooks, bytecode, and `workspace/`; files under those paths are not available during Docker builds.
+- The image healthcheck only verifies port `8888` accepts TCP connections; pytest adds the stronger Jupyter HTTP API check.
+- Publishing paths are GitHub Actions only: `docker-release.yml` publishes `latest`, tag, SHA, and date tags on `main`/`v*`; `docker-refresh.yml` publishes weekly, SHA, and date tags on schedule/manual dispatch.
