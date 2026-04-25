@@ -44,6 +44,7 @@ Use `make pull` to refresh the published image explicitly when `DSML_MODE=image`
 It reads its settings from `.env`, including:
 
 - `COMPOSE_PROJECT_NAME`
+- `CONTAINER_NAME`
 - `DSML_MODE`
 - `GPU_ENABLED`
 - `GPU_DEVICES`
@@ -56,6 +57,8 @@ It reads its settings from `.env`, including:
 - `JUPYTER_PORT`
 - `WORKSPACE_DIR`
 - `JUPYTER_ROOT_DIR`
+- `HOST_UID`
+- `HOST_GID`
 - `JUPYTER_APP_LOG_LEVEL`
 - `JUPYTER_SERVER_LOG_LEVEL`
 - `JUPYTER_BASE_URL`
@@ -74,6 +77,7 @@ Example:
 
 ```dotenv
 COMPOSE_PROJECT_NAME=dsml-kit
+CONTAINER_NAME=dsml-kit
 DSML_MODE=image
 GPU_ENABLED=false
 GPU_DEVICES=all
@@ -115,6 +119,7 @@ Set `GPU_ENABLED=true` to enable NVIDIA GPU access. This requires NVIDIA Contain
 - `make clean-all`: run `make clean` and remove the selected local image tag
 - `make nuke`: prompt for `Yes, do as I say!`, then delete compose resources and remove the host workspace directory configured by `WORKSPACE_DIR`
 - `make validate`: build and run `docker scout quickview` and `docker scout cves`
+- `make freeze`: run `pip freeze` inside the selected image without starting JupyterLab
 - `make publish`: build, tag the image with today's date, and push both the dated tag and `latest` to GHCR
 - `make env`: create `.env` with a random Jupyter token if missing
 
