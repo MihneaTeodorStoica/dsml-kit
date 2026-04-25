@@ -118,7 +118,8 @@ Set `GPU_ENABLED=true` to enable NVIDIA GPU access. This requires NVIDIA Contain
 - `make clean`: run `docker compose down --remove-orphans`
 - `make clean-all`: run `make clean` and remove the selected local image tag
 - `make nuke`: prompt for `Yes, do as I say!`, then delete compose resources and remove the host workspace directory configured by `WORKSPACE_DIR`
-- `make validate`: build and run `docker scout quickview` and `docker scout cves`
+- `make test`: build the local validation image and run pytest-based image, Compose, package import, HTTP, UID/GID, and workspace write smoke tests
+- `make validate`: run `make test`, then run `docker scout quickview` and `docker scout cves`
 - `make freeze`: run `pip freeze` inside the selected image without starting JupyterLab
 - `make publish`: build, tag the image with today's date, and push both the dated tag and `latest` to GHCR
 - `make env`: create `.env` with a random Jupyter token if missing
@@ -138,9 +139,33 @@ Key packages pinned in `requirements.txt`:
 
 - Dependencies are installed from `requirements.txt` with `pip` during image build.
 - The image sets Jupyter defaults through environment variables, and `compose.yaml` forwards overrides from `.env`.
-- The container includes a basic health check that verifies something is listening on port `8888`.
+- The container includes a basic health check that verifies something is listening on port `8888`; `make test` also verifies the Jupyter HTTP API responds.
 - The default runtime path uses `DSML_MODE=image`; set `DSML_MODE=dev` in `.env` to switch `make run` to a local build via `compose.dev.yaml`.
 - `latest` is the default user-facing tag, while CI also publishes traceable dated and commit-based tags.
 - Pushing a `v*` tag publishes the matching release image; GitHub Releases are created manually.
 - The host `WORKSPACE_DIR` bind mount is required so notebooks and outputs persist across container rebuilds or upgrades.
 - The image is intentionally minimal and centered on notebooks rather than a full application scaffold.
+
+## Testing
+
+Run the full runtime smoke suite locally:
+
+```bash
+make test
+```
+
+This validates Compose configuration, builds `dsml-kit:validate`, starts the image directly, checks the Jupyter HTTP API, verifies key package imports, starts the real Compose runtime path, and confirms the mounted workspace is writable as the host UID.
+
+The tests use `pytest`. Install the local test runner dependency when needed:
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+```
+
+Run the smoke suite plus Docker Scout security checks:
+
+```bash
+make validate
+```
+
+GitHub validation uses the same pytest suite under `tests/`, and release/refresh publishing is gated on those runtime checks.
