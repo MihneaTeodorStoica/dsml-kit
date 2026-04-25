@@ -28,9 +28,26 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          load: true
           push: false
           tags: dsml-kit:validate
           cache-from: type=gha,scope=docker-image
           cache-to: type=gha,mode=max,scope=docker-image
-          provenance: mode=min
+          provenance: false
 
+      - name: Smoke test container startup
+        run: |
+          docker run -d --name dsml-kit-validate -e JUPYTER_TOKEN=validate-token -p 127.0.0.1:8888:8888 dsml-kit:validate
+          for _ in $(seq 1 30); do
+            status=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' dsml-kit-validate)
+            if [ "$status" = "healthy" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs dsml-kit-validate
+          exit 1
+
+      - name: Clean up validation container
+        if: always()
+        run: docker rm -f dsml-kit-validate || true

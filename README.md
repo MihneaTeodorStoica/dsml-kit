@@ -19,57 +19,104 @@ It provides a small JupyterLab-based environment with common notebook packages, 
 
 ## Quick Start
 
-Build the image:
-
-```bash
-make build
-```
-
-Start JupyterLab with Docker Compose:
+Set `DSML_MODE=image` in `.env` to run the published image without building locally:
 
 ```bash
 make run
 ```
 
-`make run` creates `token.txt` if it does not already exist, exports that value as `JUPYTER_TOKEN`, and starts `docker compose up --build`.
+`make run` creates `.env` if it does not already exist and generates a `JUPYTER_TOKEN`.
+With `DSML_MODE=image`, it starts Docker Compose with the published image from `IMAGE_NAME:DSML_TAG`, which defaults to `ghcr.io/mihneateodorstoica/dsml-kit:latest`.
 The container exposes Jupyter on port `8888` by default.
+
+Switch `.env` to local development mode to build and run locally:
+
+```bash
+DSML_MODE=dev
+make run
+```
+
+Use `make pull` to refresh the published image explicitly when `DSML_MODE=image`.
 
 ## Compose Configuration
 
-`compose.yaml` currently defines a single `app` service with:
+`compose.yaml` is the default user/runtime path and defines a single `app` service that runs the published image.
+It reads its settings from `.env`, including:
 
-- image `ghcr.io/mihneateodorstoica/dsml-kit:latest`
-- container name `dsml`
-- build context `.` with `Dockerfile`
-- port mapping `8888:8888`
-- optional `JUPYTER_TOKEN` passed through from the environment
+- `COMPOSE_PROJECT_NAME`
+- `DSML_MODE`
+- `GPU_ENABLED`
+- `GPU_DEVICES`
+- `NVIDIA_DRIVER_CAPABILITIES`
+- `IMAGE_NAME`
+- `DSML_TAG`
+- `PULL_POLICY`
+- `RESTART_POLICY`
+- `JUPYTER_BIND_ADDRESS`
+- `JUPYTER_PORT`
+- `WORKSPACE_DIR`
+- `JUPYTER_ROOT_DIR`
+- `JUPYTER_APP_LOG_LEVEL`
+- `JUPYTER_SERVER_LOG_LEVEL`
+- `JUPYTER_BASE_URL`
+- `JUPYTER_EXTRA_ARGS`
+- `JUPYTER_TOKEN`
 
-## GPU Support
+`compose.gpu.yaml` is included automatically when `GPU_ENABLED=true` and requests NVIDIA GPU access through Docker Compose.
 
-The Compose service reserves an NVIDIA GPU device by default:
+`compose.dev.yaml` is the development override and adds the local Docker build configuration used automatically when `DSML_MODE=dev`.
 
-```yaml
-deploy:
-  resources:
-    reservations:
-      devices:
-        - driver: nvidia
-          capabilities: [gpu]
+## Environment File
+
+`.env.example` shows the supported configuration keys. `.env` is ignored by git and is generated automatically by `make run` when missing.
+
+Example:
+
+```dotenv
+COMPOSE_PROJECT_NAME=dsml-kit
+DSML_MODE=image
+GPU_ENABLED=false
+GPU_DEVICES=all
+NVIDIA_DRIVER_CAPABILITIES=all
+IMAGE_NAME=ghcr.io/mihneateodorstoica/dsml-kit
+DSML_TAG=latest
+PULL_POLICY=missing
+RESTART_POLICY=unless-stopped
+JUPYTER_BIND_ADDRESS=127.0.0.1
+JUPYTER_PORT=8888
+WORKSPACE_DIR=./workspace
+JUPYTER_ROOT_DIR=/home/jovyan/work
+HOST_UID=1000
+HOST_GID=1000
+JUPYTER_APP_LOG_LEVEL=WARN
+JUPYTER_SERVER_LOG_LEVEL=WARN
+JUPYTER_BASE_URL=/
+JUPYTER_EXTRA_ARGS=
+JUPYTER_TOKEN=replace-me
 ```
 
-If your machine does not have NVIDIA GPU support configured, you may need to remove or override the GPU reservation before running the stack.
+`WORKSPACE_DIR` is mounted into `JUPYTER_ROOT_DIR`, so notebooks and local files persist on the host. `make run` exports the current host UID/GID so the notebook process can write to that mount.
+
+Set `GPU_ENABLED=true` to enable NVIDIA GPU access. This requires NVIDIA Container Toolkit on the host.
 
 ## Make Targets
 
-- `make build`: build the Docker image with `docker compose build`
-- `make run`: ensure `token.txt` exists and run `docker compose up --build`
+- `make build`: build locally only when `DSML_MODE=dev`; otherwise it skips local build work
+- `make build-dev`: build the local development image via `compose.dev.yaml`
+- `make pull`: pull the published image referenced by `.env` when `DSML_MODE=image`
+- `make prepare-workspace`: create `WORKSPACE_DIR` and repair write permissions when possible
+- `make run`: ensure `.env` exists, then run either published-image or local-dev mode based on `DSML_MODE`
+- `make start`: same as `make run`, but detached
+- `make run-dev` / `make run-image`: optional aliases that force the mode for one command
 - `make logs`: follow `app` service logs
 - `make shell`: open a shell in the running `app` container
 - `make stop`: stop the compose services
-- `make clean`: run `docker compose down --remove-orphans` and delete `token.txt`
+- `make clean`: run `docker compose down --remove-orphans`
+- `make clean-all`: run `make clean` and remove the selected local image tag
+- `make nuke`: prompt for `Yes, do as I say!`, then delete compose resources and remove the host workspace directory configured by `WORKSPACE_DIR`
 - `make validate`: build and run `docker scout quickview` and `docker scout cves`
 - `make publish`: build, tag the image with today's date, and push both the dated tag and `latest` to GHCR
-- `make token`: create `token.txt` with a random hex token if missing
+- `make env`: create `.env` with a random Jupyter token if missing
 
 ## Installed Packages
 
@@ -85,5 +132,9 @@ Key packages pinned in `requirements.txt`:
 ## Development Notes
 
 - Dependencies are installed from `requirements.txt` with `pip` during image build.
-- The container starts `start-notebook.py` with both `Application` and `ServerApp` log levels set to `CRITICAL`.
+- The image sets Jupyter defaults through environment variables, and `compose.yaml` forwards overrides from `.env`.
+- The container includes a basic health check that verifies something is listening on port `8888`.
+- The default runtime path uses `DSML_MODE=image`; set `DSML_MODE=dev` in `.env` to switch `make run` to a local build via `compose.dev.yaml`.
+- `latest` is the default user-facing tag, while CI also publishes traceable dated and commit-based tags.
+- The host `WORKSPACE_DIR` bind mount is required so notebooks and outputs persist across container rebuilds or upgrades.
 - The image is intentionally minimal and centered on notebooks rather than a full application scaffold.

@@ -2,19 +2,28 @@ name: dsml-kit
 
 services:
   app:
-    image: ghcr.io/mihneateodorstoica/dsml-kit:latest
-    container_name: dsml
-    build:
-      context: .
-      dockerfile: Dockerfile
-      pull: true
+    image: ${IMAGE_NAME:-ghcr.io/mihneateodorstoica/dsml-kit}:${DSML_TAG:-latest}
+    pull_policy: ${PULL_POLICY:-missing}
+    restart: ${RESTART_POLICY:-unless-stopped}
+    init: true
+    user: root
+    security_opt:
+      - no-new-privileges:true
+    working_dir: ${JUPYTER_ROOT_DIR:-/home/jovyan/work}
     ports:
-      - "8888:8888"
+      - "${JUPYTER_BIND_ADDRESS:-127.0.0.1}:${JUPYTER_PORT:-8888}:8888"
+    volumes:
+      - ${WORKSPACE_DIR:-./workspace}:${JUPYTER_ROOT_DIR:-/home/jovyan/work}
     environment:
-      - JUPYTER_TOKEN
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              capabilities: [gpu]
+      JUPYTER_APP_LOG_LEVEL: ${JUPYTER_APP_LOG_LEVEL:-WARN}
+      JUPYTER_SERVER_LOG_LEVEL: ${JUPYTER_SERVER_LOG_LEVEL:-WARN}
+      JUPYTER_ROOT_DIR: ${JUPYTER_ROOT_DIR:-/home/jovyan/work}
+      JUPYTER_BASE_URL: ${JUPYTER_BASE_URL:-/}
+      JUPYTER_EXTRA_ARGS: ${JUPYTER_EXTRA_ARGS:-}
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-}
+      NB_UID: ${HOST_UID:-1000}
+      NB_GID: ${HOST_GID:-100}
+      CHOWN_HOME: "yes"
+      CHOWN_HOME_OPTS: -R
+      CHOWN_EXTRA: ${JUPYTER_ROOT_DIR:-/home/jovyan/work}
+      CHOWN_EXTRA_OPTS: -R
