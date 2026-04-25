@@ -5,7 +5,6 @@ services:
     image: ${IMAGE_NAME:-ghcr.io/mihneateodorstoica/dsml-kit}:${DSML_TAG:-latest}
     pull_policy: ${PULL_POLICY:-missing}
     restart: ${RESTART_POLICY:-unless-stopped}
-    init: true
     user: root
     security_opt:
       - no-new-privileges:true
