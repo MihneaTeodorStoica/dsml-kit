@@ -136,6 +136,6 @@ Key packages pinned in `requirements.txt`:
 - The container includes a basic health check that verifies something is listening on port `8888`.
 - The default runtime path uses `DSML_MODE=image`; set `DSML_MODE=dev` in `.env` to switch `make run` to a local build via `compose.dev.yaml`.
 - `latest` is the default user-facing tag, while CI also publishes traceable dated and commit-based tags.
-- Pushing a `v*` tag creates a GitHub Release with generated release notes and publishes the matching release image.
+- Pushing a `v*` tag publishes the matching release image; GitHub Releases are created manually.
 - The host `WORKSPACE_DIR` bind mount is required so notebooks and outputs persist across container rebuilds or upgrades.
 - The image is intentionally minimal and centered on notebooks rather than a full application scaffold.
