@@ -1,4 +1,4 @@
-.PHONY: build build-dev pull prepare-workspace run start run-dev run-image logs shell stop clean clean-all nuke validate publish env
+.PHONY: build build-dev pull prepare-workspace run start run-dev run-image logs shell stop clean clean-all nuke validate freeze publish env
 
 -include .env
 
@@ -125,6 +125,9 @@ validate: env
 		docker scout quickview $(IMAGE); \
 		docker scout cves $(IMAGE); \
 	fi
+
+freeze:
+	docker run --rm --entrypoint python $(IMAGE) -m pip freeze
 
 publish: build-dev
 	docker image tag $(IMAGE) ghcr.io/mihneateodorstoica/dsml-kit:$(DATE_TAG)
