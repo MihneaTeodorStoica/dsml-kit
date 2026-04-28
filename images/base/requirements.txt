@@ -38,7 +38,7 @@ polars==1.40.1
 polars-runtime-32==1.40.1
 pyarrow==24.0.0
 pyparsing==3.3.2
-pyright==1.1.408
+pyright==1.1.409
 python-lsp-jsonrpc==1.1.2
 python-lsp-server==1.14.0
 pytokens==0.4.1
