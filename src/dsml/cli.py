@@ -102,6 +102,26 @@ def up(
 
 
 @app.command()
+def watch(
+    dev: Annotated[bool, typer.Option(help="Use the development image while watching.")] = False,
+    no_up: Annotated[
+        bool,
+        typer.Option("--no-up", help="Do not build and start services before watching."),
+    ] = False,
+    prune: Annotated[
+        bool,
+        typer.Option("--prune/--no-prune", help="Prune dangling images after rebuilds."),
+    ] = True,
+    quiet: Annotated[bool, typer.Option(help="Hide Docker build output.")] = False,
+) -> None:
+    """Rebuild the local runtime image when its source files change."""
+    try:
+        runtime.watch(dev=dev, no_up=no_up, prune=prune, quiet=quiet)
+    except Exception as exc:  # noqa: BLE001
+        _handle_error(exc)
+
+
+@app.command()
 def down() -> None:
     """Stop the current project container."""
     try:
