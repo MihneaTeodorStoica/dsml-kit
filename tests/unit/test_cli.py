@@ -24,4 +24,5 @@ def test_init_creates_dsml_toml(tmp_path, monkeypatch):
     assert "Bundled profile name from profiles/*.toml" in text
     assert 'profile = "minimal"' in text
     assert 'mount = "./workspace"' in text
+    assert 'image_policy = "auto"' in text
     assert 'root_dir = "/home/jovyan/work"' in text

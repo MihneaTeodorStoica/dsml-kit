@@ -21,6 +21,7 @@ def test_write_and_read_default_config(tmp_path):
     assert written["workspace"]["profile"] == "minimal"
     assert written["workspace"]["port"] == 8899
     assert written["workspace"]["jupyter_token"] == "auto"
+    assert written["workspace"]["image_policy"] == "auto"
     assert written["workspace"]["mount"] == "./workspace"
     assert written["jupyter"]["root_dir"] == "/home/jovyan/work"
     assert written["packages"]["extra"] == []
@@ -48,4 +49,12 @@ def test_invalid_gpu_value_fails_validation():
     data = config.default_config(gpu="sometimes")
 
     with pytest.raises(config.ConfigError, match="gpu"):
+        config.validate_config(data)
+
+
+def test_invalid_image_policy_fails_validation():
+    data = config.default_config()
+    data["workspace"]["image_policy"] = "sometimes"
+
+    with pytest.raises(config.ConfigError, match="image_policy"):
         config.validate_config(data)

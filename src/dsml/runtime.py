@@ -98,11 +98,13 @@ def up(*, attach: bool = False, build: bool = False, pull: bool = False, dev: bo
     project_root, _, data = load_workspace()
     options = run_options(project_root, data, attach=attach, dev=dev)
 
-    if build or dev:
-        images.build_image(tag=options.image, dev=dev)
-    if pull:
-        images.pull_image(options.image)
-    ensure_image_available(options.image)
+    prepare_image(
+        options.image,
+        policy=data["workspace"].get("image_policy", "auto"),
+        build=build,
+        pull=pull,
+        dev=dev,
+    )
     options = replace(
         options,
         run_signature=container_signature(
@@ -251,13 +253,51 @@ def nuke(*, confirmation: str) -> None:
     console.print(f"Deleted container and home volume for {project_root}")
 
 
-def ensure_image_available(image: str) -> None:
+def prepare_image(
+    image: str,
+    *,
+    policy: str = "auto",
+    build: bool = False,
+    pull: bool = False,
+    dev: bool = False,
+) -> None:
+    policy = str(policy or "auto").strip().lower()
+    if build or dev:
+        images.build_image(tag=image, dev=dev)
+        if pull:
+            images.pull_image(image)
+        ensure_local_image(image)
+        return
+
+    if pull:
+        images.pull_image(image)
+        ensure_local_image(image)
+        return
+
+    if policy == "build" or (policy == "auto" and should_build_image(image)):
+        images.build_image(tag=image)
+        ensure_local_image(image)
+        return
+
+    if policy == "pull":
+        images.pull_image(image)
+        ensure_local_image(image)
+        return
+
+    ensure_image_available(image, allow_pull=policy == "auto")
+
+
+def ensure_image_available(image: str, *, allow_pull: bool = True) -> None:
     if docker.image_exists(image):
         return
-    if image == images.DEFAULT_DEV_IMAGE:
+    if not allow_pull:
+        raise RuntimeError(
+            f"Image {image} is not present locally and [workspace].image_policy is set to never."
+        )
+    if should_build_image(image):
         raise RuntimeError(
             f"Image {image} is not present locally. "
-            "Run 'dsml image build --dev' or start with 'dsml up --dev --build'."
+            "Set [workspace].image_policy to 'build' or run 'dsml image build --dev'."
         )
     console.print(f"Pulling {image} because it is not present locally.")
     try:
@@ -266,6 +306,16 @@ def ensure_image_available(image: str) -> None:
         raise RuntimeError(f"Image {image} is not present locally and automatic pull failed.") from exc
     if not docker.image_exists(image):
         raise RuntimeError(f"Image {image} is still not present after pull.")
+
+
+def ensure_local_image(image: str) -> None:
+    if docker.image_exists(image):
+        return
+    raise RuntimeError(f"Image {image} is not present locally.")
+
+
+def should_build_image(image: str) -> bool:
+    return image == images.DEFAULT_DEV_IMAGE
 
 
 def container_signature(
