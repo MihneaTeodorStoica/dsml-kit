@@ -45,6 +45,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "dsml-kit" },
     { name = "pytest" },
 ]
 
@@ -57,7 +58,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=7.4.4" }]
+dev = [
+    { name = "dsml-kit", editable = "." },
+    { name = "pytest", specifier = ">=7.4.4" },
+]
 
 [[package]]
 name = "iniconfig"
