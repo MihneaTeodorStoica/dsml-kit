@@ -146,6 +146,38 @@ def test_up_honors_build_image_policy_before_starting(tmp_path, monkeypatch):
     assert ("up", paths.compose_path(tmp_path), True) in calls
 
 
+def test_up_build_policy_writes_runtime_watch_metadata(tmp_path, monkeypatch):
+    data = config.default_config(image="example/dsml-kit:local")
+    data["workspace"]["image_policy"] = "build"
+    write_workspace(tmp_path, data)
+    image_dir = tmp_path / "images" / "base"
+    image_dir.mkdir(parents=True)
+    (image_dir / "Dockerfile").write_text("FROM example\n")
+    (image_dir / "requirements.txt").write_text("\n")
+    (tmp_path / ".dockerignore").write_text(".git\n")
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    monkeypatch.setattr(runtime.paths, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        runtime.images,
+        "build_image",
+        lambda tag=runtime.images.DEFAULT_LOCAL_IMAGE, dev=False: calls.append(("build", tag, dev)),
+    )
+    monkeypatch.setattr(runtime.docker, "image_exists", lambda image: True)
+    monkeypatch.setattr(runtime.docker, "image_id", lambda image: "sha256:test")
+    stub_compose_up(monkeypatch, calls)
+
+    runtime.up(wait=False)
+
+    service = read_compose_file(tmp_path)["services"]["app"]
+    assert service["build"] == {"context": ".", "dockerfile": "images/base/Dockerfile"}
+    assert service["develop"]["watch"] == [
+        {"action": "rebuild", "path": "images/base"},
+        {"action": "rebuild", "path": ".dockerignore"},
+    ]
+
+
 def test_up_honors_never_image_policy_for_missing_image(tmp_path, monkeypatch):
     data = config.default_config(image="example/dsml-kit:local")
     data["workspace"]["image_policy"] = "never"

@@ -197,14 +197,17 @@ def up(
     except backends.BackendError as exc:
         raise RuntimeError(str(exc)) from exc
     options = run_options(project_root, data, attach=attach, dev=dev)
+    image_policy = str(data["workspace"].get("image_policy", "auto")).strip().lower()
 
     prepare_image(
         options.image,
-        policy=data["workspace"].get("image_policy", "auto"),
+        policy=image_policy,
         build=build,
         pull=pull,
         dev=dev,
     )
+    if should_use_runtime_image_source(options, policy=image_policy, build=build, dev=dev):
+        options = options_with_runtime_image_source(options)
     options = replace(
         options,
         run_signature=container_signature(
@@ -256,7 +259,7 @@ def watch(
 
     options = run_options(project_root, data, dev=dev)
     image_policy = str(data["workspace"].get("image_policy", "auto")).strip().lower()
-    if not dev and image_policy != "build" and not should_build_image(options.image):
+    if not should_use_runtime_image_source(options, policy=image_policy, build=False, dev=dev):
         raise RuntimeError(
             "Compose watch rebuilds a local runtime image. "
             "Use the dev profile, set [workspace].image_policy to 'build', or pass --dev."
@@ -481,6 +484,16 @@ def ensure_local_image(image: str) -> None:
 
 def should_build_image(image: str) -> bool:
     return image == images.DEFAULT_DEV_IMAGE
+
+
+def should_use_runtime_image_source(
+    options: RuntimeOptions,
+    *,
+    policy: str,
+    build: bool,
+    dev: bool,
+) -> bool:
+    return build or dev or policy == "build" or (policy == "auto" and should_build_image(options.image))
 
 
 def options_with_runtime_image_source(options: RuntimeOptions) -> RuntimeOptions:

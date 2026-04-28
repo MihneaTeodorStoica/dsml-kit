@@ -276,6 +276,10 @@ Watch the runtime image source and rebuild the running service when
 uv run dsml watch --dev
 ```
 
+When a workspace is configured for local runtime image builds, `dsml up --attach`
+also writes the Compose Watch configuration so Docker Compose's attached
+`w Enable Watch` shortcut can start watching.
+
 Compose Watch requires Docker Compose 2.22 or newer. The command is intended
 for local runtime image development; normal notebook projects should keep using
 `dsml up`.
