@@ -48,11 +48,18 @@ def run_checks(start: Path | None = None) -> list[Check]:
 
     image = workspace.get("image") or profile.image
     if docker.docker_cli_exists() and docker.daemon_reachable():
+        policy = workspace.get("image_policy", "auto")
+        if policy == "build" or (policy == "auto" and runtime.should_build_image(image)):
+            image_message = f"{image} is not present locally. 'dsml up' will build it."
+        elif policy == "never":
+            image_message = f"{image} is not present locally and image_policy is set to never."
+        else:
+            image_message = f"{image} is not present locally. 'dsml up' will try to pull it."
         checks.append(
             _check(
                 "Image",
                 docker.image_exists(image),
-                f"{image} is not present locally. 'dsml up' will try to pull it.",
+                image_message,
             )
         )
     else:

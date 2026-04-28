@@ -38,7 +38,7 @@ dsml init --profile minimal
 dsml up
 ```
 
-`dsml init` creates `dsml.toml`. `dsml up` starts a container, mounts `./workspace/` at `/home/jovyan/work`, creates a persistent Docker volume for `/home/jovyan`, and prints the JupyterLab URL. If the configured image is missing locally, `dsml up` pulls it automatically.
+`dsml init` creates `dsml.toml`. `dsml up` starts a container, mounts `./workspace/` at `/home/jovyan/work`, creates a persistent Docker volume for `/home/jovyan`, and prints the JupyterLab URL. By default, `dsml up` follows `image_policy = "auto"`: remote images are pulled when missing, while the local `dsml-kit:dev` image is built from this repository.
 
 ## Profiles
 
@@ -76,6 +76,8 @@ dsml up --pull
 dsml up --dev --build
 ```
 
+The `--pull` and `--build` flags override the image policy in `dsml.toml` for a single run.
+
 ## Configuration
 
 `dsml.toml` is the workspace config file created by `dsml init`. It is safe to edit by hand.
@@ -90,6 +92,7 @@ container_name = "auto"
 home_volume = "auto"
 gpu = "auto"
 image = "ghcr.io/mihneateodorstoica/dsml-kit:minimal"
+image_policy = "auto"
 jupyter_token = "auto"
 
 [jupyter]
@@ -113,7 +116,10 @@ extra = []
 - `home_volume`: Docker volume mounted at `/home/jovyan`, or `auto`
 - `gpu`: `auto`, `true`, or `false`
 - `image`: Docker image used by `dsml up`
+- `image_policy`: `auto`, `pull`, `build`, or `never`
 - `jupyter_token`: Jupyter token, or `auto` to generate one at startup
+
+`image_policy = "auto"` builds `dsml-kit:dev` and pulls other missing images. Use `"pull"` to pull before each start, `"build"` to build before each start, or `"never"` to require that the image already exists locally.
 
 `[jupyter]` controls the server inside the container:
 

@@ -50,9 +50,12 @@ def init(
 @app.command()
 def up(
     attach: Annotated[bool, typer.Option(help="Attach to the container instead of starting detached.")] = False,
-    build: Annotated[bool, typer.Option(help="Build the image before starting.")] = False,
-    pull: Annotated[bool, typer.Option(help="Pull the selected image before starting, even if it exists locally.")] = False,
-    dev: Annotated[bool, typer.Option(help="Use a locally built development image.")] = False,
+    build: Annotated[bool, typer.Option(help="Build the image before starting, overriding image_policy.")] = False,
+    pull: Annotated[
+        bool,
+        typer.Option(help="Pull the selected image before starting, overriding image_policy."),
+    ] = False,
+    dev: Annotated[bool, typer.Option(help="Use and build the development image.")] = False,
 ) -> None:
     """Start the Docker workspace."""
     try:

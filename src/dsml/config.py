@@ -24,6 +24,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "home_volume": "auto",
         "gpu": "auto",
         "image": "ghcr.io/mihneateodorstoica/dsml-kit:minimal",
+        "image_policy": "auto",
         "jupyter_token": "auto",
     },
     "jupyter": {
@@ -114,6 +115,8 @@ def render_documented_config(data: dict[str, Any]) -> str:
         _entry("gpu", workspace["gpu"]),
         "# Runtime Docker image used by `dsml up`.",
         _entry("image", workspace["image"]),
+        "# Image preparation policy for `dsml up`: auto, pull, build, or never.",
+        _entry("image_policy", workspace["image_policy"]),
         "# Jupyter token, or auto to generate one each time the workspace starts.",
         _entry("jupyter_token", workspace["jupyter_token"]),
         "",
@@ -150,6 +153,7 @@ def validate_config(data: dict[str, Any]) -> dict[str, Any]:
     workspace["container_name"] = _required_string(workspace, "container_name")
     workspace["home_volume"] = _required_string(workspace, "home_volume")
     workspace["image"] = _required_string(workspace, "image")
+    workspace["image_policy"] = _valid_image_policy(workspace.get("image_policy", "auto"))
     workspace["jupyter_token"] = str(workspace.get("jupyter_token", "auto")).strip() or "auto"
     workspace["port"] = _valid_port(workspace.get("port"))
     workspace["gpu"] = _valid_gpu(workspace.get("gpu", "auto"))
@@ -227,6 +231,13 @@ def _valid_gpu(value: object) -> bool | str:
     if text == "false":
         return False
     raise ConfigError("[workspace].gpu must be one of: auto, true, false.")
+
+
+def _valid_image_policy(value: object) -> str:
+    text = str(value or "auto").strip().lower()
+    if text in {"auto", "pull", "build", "never"}:
+        return text
+    raise ConfigError("[workspace].image_policy must be one of: auto, pull, build, never.")
 
 
 def _entry(key: str, value: object) -> str:
