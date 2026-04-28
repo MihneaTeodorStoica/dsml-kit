@@ -48,6 +48,7 @@ dsml = ["templates/*.toml"]
 [tool.uv.workspace]
 members = [
     ".",
+    ".",
 ]
 
 [tool.uv.sources]
