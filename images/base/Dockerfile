@@ -3,11 +3,23 @@ FROM quay.io/jupyter/minimal-notebook:python-3.11@sha256:1f1fab5b452289aff0ed9c6
 ENV JUPYTER_APP_LOG_LEVEL=WARN \
     JUPYTER_SERVER_LOG_LEVEL=WARN \
     JUPYTER_ROOT_DIR=/home/jovyan/work \
-    JUPYTER_BASE_URL=/
+    JUPYTER_BASE_URL=/ \
+    UV_SYSTEM_PYTHON=1 \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1
 
-COPY --chown=${NB_UID}:${NB_GID} requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt
+USER root
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --chown=${NB_UID}:${NB_GID} images/base/requirements.txt /tmp/requirements.txt
+RUN mkdir -p /home/${NB_USER}/work \
+    && chown ${NB_UID}:${NB_GID} /home/${NB_USER}/work \
+    && uv pip install --system -r /tmp/requirements.txt \
+    && rm /tmp/requirements.txt \
+    && fix-permissions "${CONDA_DIR}" \
+    && fix-permissions "/home/${NB_USER}"
+
+USER ${NB_UID}
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
     CMD python -c "import socket; socket.create_connection(('127.0.0.1', 8888), 5).close()"

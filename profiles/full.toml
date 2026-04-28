@@ -1,0 +1,4 @@
+name = "full"
+image = "ghcr.io/mihneateodorstoica/dsml-kit:full"
+description = "Batteries-included DS/ML workspace."
+gpu = "auto"

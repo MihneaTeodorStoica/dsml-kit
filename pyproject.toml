@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dsml-kit"
+version = "0.1.0"
+description = "Profile-based ML workspace with Docker + uv, managed via a simple CLI."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+  { name = "Mihnea Teodor Stoica" }
+]
+dependencies = [
+  "typer>=0.12",
+  "rich>=13",
+  "tomli-w>=1.0",
+]
+
+[project.scripts]
+dsml = "dsml.cli:app"
+
+[dependency-groups]
+dev = [
+  "pytest>=7.4.4",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+dsml = ["templates/*.toml"]
+
+[tool.setuptools.data-files]
+"share/dsml-kit/profiles" = [
+  "profiles/dev.toml",
+  "profiles/minimal.toml",
+  "profiles/gpu.toml",
+  "profiles/full.toml",
+]
