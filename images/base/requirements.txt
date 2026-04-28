@@ -53,4 +53,4 @@ tinycss2==1.2.1
 tqdm==4.66.5
 traitlets==5.14.3
 ujson==5.12.0
-zstandard==0.23.0
+zstandard==0.25.0
