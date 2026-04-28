@@ -52,4 +52,4 @@
 
 - `.dockerignore` excludes local runtime state, notebooks, bytecode, and GitHub metadata from Docker builds.
 - The image healthcheck verifies port `8888` accepts TCP connections; pytest adds the stronger Jupyter HTTP API check.
-- Publishing paths are GitHub Actions only: release and refresh workflows publish GHCR tags after package and image validation.
+- Publishing paths are GitHub Actions only: release and refresh workflows publish GHCR tags after package and image validation; `pypi-publish.yml` publishes the Python package to PyPI from matching `v*` tags.
