@@ -6,6 +6,7 @@ import pytest
 
 from conftest import assert_run, free_port, run, wait_for_container_health, wait_for_http
 from dsml import compose, docker
+from dsml.options import RuntimeOptions
 
 
 UID_GID_AND_WORKSPACE_CHECK = """
@@ -65,7 +66,7 @@ def test_compose_runtime_serves_jupyter_and_writes_workspace_as_host_user(reques
     request.addfinalizer(cleanup)
     cleanup()
 
-    options = docker.DockerRunOptions(
+    options = RuntimeOptions(
         image=image,
         container_name=container_name,
         project_root=tmp_path,

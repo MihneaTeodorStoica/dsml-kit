@@ -7,6 +7,7 @@ from typing import Any
 import yaml
 
 from dsml import docker, paths
+from dsml.options import RuntimeOptions
 
 
 SERVICE_NAME = "app"
@@ -25,7 +26,7 @@ def compose_project_name(project_root: Path) -> str:
     return paths.project_name(project_root)
 
 
-def build_compose_model(options: docker.DockerRunOptions) -> dict[str, Any]:
+def build_compose_model(options: RuntimeOptions) -> dict[str, Any]:
     labels = {
         paths.PROJECT_LABEL: paths.project_name(options.project_root),
         paths.CONFIG_LABEL: str(options.project_root / paths.CONFIG_FILE),
@@ -106,7 +107,7 @@ def render_compose_yaml(model: dict[str, Any]) -> str:
     return yaml.safe_dump(model, sort_keys=False, default_flow_style=False)
 
 
-def write_compose_file(project_root: Path, options: docker.DockerRunOptions) -> Path:
+def write_compose_file(project_root: Path, options: RuntimeOptions) -> Path:
     path = compose_path(project_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_compose_yaml(build_compose_model(options)))
@@ -124,10 +125,18 @@ def compose_base_args(project_root: Path, compose_file: Path) -> list[str]:
     ]
 
 
-def compose_up_args(project_root: Path, compose_file: Path, *, detach: bool) -> list[str]:
+def compose_up_args(
+    project_root: Path,
+    compose_file: Path,
+    *,
+    detach: bool,
+    force_recreate: bool = False,
+) -> list[str]:
     args = [*compose_base_args(project_root, compose_file), "up"]
     if detach:
         args.append("-d")
+    if force_recreate:
+        args.append("--force-recreate")
     return args
 
 
@@ -152,12 +161,18 @@ def compose_logs_args(
     *,
     follow: bool = False,
     tail: int | None = None,
+    since: str | None = None,
+    timestamps: bool = False,
 ) -> list[str]:
     args = [*compose_base_args(project_root, compose_file), "logs"]
     if follow:
         args.append("--follow")
     if tail is not None:
         args.extend(["--tail", str(tail)])
+    if since:
+        args.extend(["--since", since])
+    if timestamps:
+        args.append("--timestamps")
     args.append(SERVICE_NAME)
     return args
 
@@ -179,15 +194,37 @@ def compose_exec_args(
     return args
 
 
-def compose_ps_args(project_root: Path, compose_file: Path, *, status: str | None = None) -> list[str]:
-    args = [*compose_base_args(project_root, compose_file), "ps", "--services"]
+def compose_ps_args(
+    project_root: Path,
+    compose_file: Path,
+    *,
+    status: str | None = None,
+    services: bool = False,
+) -> list[str]:
+    args = [*compose_base_args(project_root, compose_file), "ps"]
+    if services:
+        args.append("--services")
     if status:
         args.extend(["--status", status])
     return args
 
 
-def up(project_root: Path, compose_file: Path, *, detach: bool = True) -> subprocess.CompletedProcess[str]:
-    return docker.run(compose_up_args(project_root, compose_file, detach=detach), check=True, capture=False)
+def compose_config_args(project_root: Path, compose_file: Path) -> list[str]:
+    return [*compose_base_args(project_root, compose_file), "config"]
+
+
+def up(
+    project_root: Path,
+    compose_file: Path,
+    *,
+    detach: bool = True,
+    force_recreate: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    return docker.run(
+        compose_up_args(project_root, compose_file, detach=detach, force_recreate=force_recreate),
+        check=True,
+        capture=False,
+    )
 
 
 def stop(project_root: Path, compose_file: Path) -> subprocess.CompletedProcess[str]:
@@ -208,8 +245,20 @@ def logs(
     *,
     follow: bool = False,
     tail: int | None = None,
+    since: str | None = None,
+    timestamps: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    return docker.run(compose_logs_args(project_root, compose_file, follow=follow, tail=tail), check=False)
+    return docker.run(
+        compose_logs_args(
+            project_root,
+            compose_file,
+            follow=follow,
+            tail=tail,
+            since=since,
+            timestamps=timestamps,
+        ),
+        check=False,
+    )
 
 
 def exec(
@@ -230,7 +279,19 @@ def exec(
 
 
 def service_running(project_root: Path, compose_file: Path) -> bool:
-    result = docker.run(compose_ps_args(project_root, compose_file, status="running"), check=False, capture=True)
+    result = docker.run(
+        compose_ps_args(project_root, compose_file, status="running", services=True),
+        check=False,
+        capture=True,
+    )
     if result.returncode != 0:
         return False
     return SERVICE_NAME in {line.strip() for line in result.stdout.splitlines()}
+
+
+def ps(project_root: Path, compose_file: Path) -> subprocess.CompletedProcess[str]:
+    return docker.run(compose_ps_args(project_root, compose_file), check=False)
+
+
+def config(project_root: Path, compose_file: Path) -> subprocess.CompletedProcess[str]:
+    return docker.run(compose_config_args(project_root, compose_file), check=False)

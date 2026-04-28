@@ -2,7 +2,8 @@ from pathlib import Path
 
 import yaml
 
-from dsml import compose, docker, paths
+from dsml import compose, paths
+from dsml.options import RuntimeOptions
 
 
 def options(tmp_path, **overrides):
@@ -25,7 +26,7 @@ def options(tmp_path, **overrides):
         "run_signature": "signature-test",
     }
     values.update(overrides)
-    return docker.DockerRunOptions(**values)
+    return RuntimeOptions(**values)
 
 
 def test_compose_model_captures_runtime_contract(tmp_path):
@@ -118,6 +119,12 @@ def test_compose_command_builders_include_project_and_file(tmp_path):
 
     assert compose.compose_base_args(tmp_path, compose_file) == base
     assert compose.compose_up_args(tmp_path, compose_file, detach=True) == [*base, "up", "-d"]
+    assert compose.compose_up_args(tmp_path, compose_file, detach=True, force_recreate=True) == [
+        *base,
+        "up",
+        "-d",
+        "--force-recreate",
+    ]
     assert compose.compose_up_args(tmp_path, compose_file, detach=False) == [*base, "up"]
     assert compose.compose_stop_args(tmp_path, compose_file) == [*base, "stop"]
     assert compose.compose_down_args(tmp_path, compose_file) == [*base, "down"]
@@ -130,6 +137,14 @@ def test_compose_command_builders_include_project_and_file(tmp_path):
         "20",
         "app",
     ]
+    assert compose.compose_logs_args(
+        tmp_path,
+        compose_file,
+        follow=False,
+        tail=None,
+        since="10m",
+        timestamps=True,
+    ) == [*base, "logs", "--since", "10m", "--timestamps", "app"]
     assert compose.compose_exec_args(tmp_path, compose_file, ["python", "-V"], user="jovyan") == [
         *base,
         "exec",
@@ -147,3 +162,12 @@ def test_compose_command_builders_include_project_and_file(tmp_path):
         user="jovyan",
         interactive=True,
     ) == [*base, "exec", "--user", "jovyan", "app", "/bin/bash"]
+    assert compose.compose_ps_args(tmp_path, compose_file) == [*base, "ps"]
+    assert compose.compose_ps_args(tmp_path, compose_file, status="running", services=True) == [
+        *base,
+        "ps",
+        "--services",
+        "--status",
+        "running",
+    ]
+    assert compose.compose_config_args(tmp_path, compose_file) == [*base, "config"]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import hashlib
 import json
 from pathlib import Path
@@ -14,7 +14,8 @@ import webbrowser
 
 from rich.console import Console
 
-from dsml import compose, config, docker, images, paths, profiles
+from dsml import backends, compose, config, docker, images, paths, profiles
+from dsml.options import RuntimeOptions
 
 
 console = Console()
@@ -22,6 +23,18 @@ console = Console()
 
 class RuntimeError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class WorkspaceStatus:
+    backend: str
+    project_name: str
+    container_name: str
+    image: str
+    running: bool
+    config_path: Path
+    compose_file: Path
+    url: str
 
 
 def init_project(
@@ -60,7 +73,7 @@ def run_options(
     *,
     attach: bool = False,
     dev: bool = False,
-) -> docker.DockerRunOptions:
+) -> RuntimeOptions:
     workspace = data["workspace"]
     jupyter = data["jupyter"]
     profile = profiles.resolve_profile(workspace["profile"])
@@ -73,7 +86,7 @@ def run_options(
         workspace.get("home_volume"),
         paths.default_home_volume(project_root),
     )
-    return docker.DockerRunOptions(
+    return RuntimeOptions(
         image=image,
         container_name=container_name,
         project_root=project_root,
@@ -94,27 +107,54 @@ def run_options(
     )
 
 
-def ensure_compose_available() -> None:
-    if docker.compose_cli_exists():
-        return
-    raise RuntimeError("Docker Compose v2 is required. Install Docker with the `docker compose` plugin.")
+def runtime_backend(data: dict) -> backends.RuntimeBackend:
+    try:
+        return backends.resolve_backend(data)
+    except backends.BackendError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
-def write_compose_for_workspace(
+def workspace_context(
     project_root: Path,
+    config_path: Path,
     data: dict,
     *,
     attach: bool = False,
     dev: bool = False,
-) -> tuple[docker.DockerRunOptions, Path]:
-    options = run_options(project_root, data, attach=attach, dev=dev)
-    return options, compose.write_compose_file(project_root, options)
+    options: RuntimeOptions | None = None,
+) -> backends.WorkspaceContext:
+    resolved_options = options or run_options(project_root, data, attach=attach, dev=dev)
+    return backends.WorkspaceContext(
+        project_root=project_root,
+        config_path=config_path,
+        data=data,
+        options=resolved_options,
+        compose_file=compose.compose_path(project_root),
+    )
+
+
+def write_compose_for_workspace(
+    project_root: Path,
+    config_path: Path,
+    data: dict,
+    *,
+    attach: bool = False,
+    dev: bool = False,
+) -> tuple[backends.RuntimeBackend, backends.WorkspaceContext]:
+    backend = runtime_backend(data)
+    context = workspace_context(project_root, config_path, data, attach=attach, dev=dev)
+    try:
+        backend.ensure_available()
+    except backends.BackendError as exc:
+        raise RuntimeError(str(exc)) from exc
+    backend.write_config(context)
+    return backend, context
 
 
 def options_with_matching_container_token(
-    options: docker.DockerRunOptions,
+    options: RuntimeOptions,
     token_policy: object,
-) -> docker.DockerRunOptions:
+) -> RuntimeOptions:
     if str(token_policy or "auto").strip() != "auto":
         return options
     if not docker.container_exists(options.container_name):
@@ -125,7 +165,7 @@ def options_with_matching_container_token(
     return options_with_container_token(options)
 
 
-def remove_legacy_container_for_compose(options: docker.DockerRunOptions) -> None:
+def remove_legacy_container_for_compose(options: RuntimeOptions) -> None:
     if not docker.container_exists(options.container_name):
         return
 
@@ -140,9 +180,22 @@ def remove_legacy_container_for_compose(options: docker.DockerRunOptions) -> Non
     ensure_success(result, f"remove legacy container {options.container_name}")
 
 
-def up(*, attach: bool = False, build: bool = False, pull: bool = False, dev: bool = False) -> None:
-    project_root, _, data = load_workspace()
-    ensure_compose_available()
+def up(
+    *,
+    attach: bool = False,
+    build: bool = False,
+    pull: bool = False,
+    dev: bool = False,
+    recreate: bool = False,
+    wait: bool = True,
+    wait_timeout: int = 30,
+) -> None:
+    project_root, config_path, data = load_workspace()
+    backend = runtime_backend(data)
+    try:
+        backend.ensure_available()
+    except backends.BackendError as exc:
+        raise RuntimeError(str(exc)) from exc
     options = run_options(project_root, data, attach=attach, dev=dev)
 
     prepare_image(
@@ -164,12 +217,22 @@ def up(*, attach: bool = False, build: bool = False, pull: bool = False, dev: bo
 
     prepare_workspace(options.mount_path)
     remove_legacy_container_for_compose(options)
-    compose_file = compose.write_compose_file(project_root, options)
-    compose.up(project_root, compose_file, detach=options.detach)
+    context = workspace_context(project_root, config_path, data, attach=attach, dev=dev, options=options)
+    backend.write_config(context)
+    backend.up(context, detach=options.detach, force_recreate=recreate)
     if attach:
         return
+    if not wait:
+        console.print(f"[green]Started[/green] {options.container_name}")
+        console.print(workspace_url(options))
+        return
 
-    if wait_for_jupyter(options):
+    ready = (
+        wait_for_jupyter(options)
+        if wait_timeout == 30
+        else wait_for_jupyter(options, attempts=max(1, wait_timeout))
+    )
+    if ready:
         console.print(f"[green]Started[/green] {options.container_name}")
         console.print(workspace_url(options))
     else:
@@ -182,12 +245,11 @@ def down() -> None:
 
 
 def stop() -> None:
-    project_root, _, data = load_workspace()
-    ensure_compose_available()
-    options, compose_file = write_compose_for_workspace(project_root, data)
-    result = compose.stop(project_root, compose_file)
+    project_root, config_path, data = load_workspace()
+    backend, context = write_compose_for_workspace(project_root, config_path, data)
+    result = backend.stop(context)
     ensure_success(result, f"stop Compose project {compose.compose_project_name(project_root)}")
-    console.print(f"Stopped {options.container_name}")
+    console.print(f"Stopped {context.options.container_name}")
 
 
 def restart(*, attach: bool = False) -> None:
@@ -195,21 +257,25 @@ def restart(*, attach: bool = False) -> None:
     up(attach=attach)
 
 
-def logs(*, follow: bool = False, tail: int | None = None) -> None:
-    project_root, _, data = load_workspace()
-    ensure_compose_available()
-    _, compose_file = write_compose_for_workspace(project_root, data)
-    compose.logs(project_root, compose_file, follow=follow, tail=tail)
+def logs(
+    *,
+    follow: bool = False,
+    tail: int | None = None,
+    since: str | None = None,
+    timestamps: bool = False,
+) -> None:
+    project_root, config_path, data = load_workspace()
+    backend, context = write_compose_for_workspace(project_root, config_path, data)
+    backend.logs(context, follow=follow, tail=tail, since=since, timestamps=timestamps)
 
 
-def shell(command: str | None = None) -> None:
-    project_root, _, data = load_workspace()
-    ensure_compose_available()
-    _, compose_file = write_compose_for_workspace(project_root, data)
+def shell(command: str | None = None, *, user: str = "jovyan") -> None:
+    project_root, config_path, data = load_workspace()
+    backend, context = write_compose_for_workspace(project_root, config_path, data)
     shell_command = [command] if command else ["/bin/bash"]
-    result = compose.exec(project_root, compose_file, shell_command, user="jovyan", interactive=True, check=False)
+    result = backend.exec(context, shell_command, user=user, interactive=True, check=False)
     if result.returncode != 0 and not command:
-        compose.exec(project_root, compose_file, ["/bin/sh"], user="jovyan", interactive=True)
+        backend.exec(context, ["/bin/sh"], user=user, interactive=True)
 
 
 def open_workspace() -> None:
@@ -226,13 +292,11 @@ def add(packages: list[str], requirement_files: list[Path] | None = None) -> Non
     if not requested:
         raise RuntimeError("Provide packages or at least one requirements file with package specifiers.")
     updated = config.add_packages(config_path, requested)
-    ensure_compose_available()
-    _, compose_file = write_compose_for_workspace(project_root, updated)
+    backend, context = write_compose_for_workspace(project_root, config_path, updated)
     console.print(f"Updated {config_path.name}")
-    if compose.service_running(project_root, compose_file):
-        compose.exec(
-            project_root,
-            compose_file,
+    if backend.service_running(context):
+        backend.exec(
+            context,
             ["uv", "pip", "install", "--system", *requested],
             user="root",
         )
@@ -241,49 +305,78 @@ def add(packages: list[str], requirement_files: list[Path] | None = None) -> Non
 
 
 def sync() -> None:
-    project_root, _, data = load_workspace()
-    options = run_options(project_root, data)
+    project_root, config_path, data = load_workspace()
     packages = data["packages"]["extra"]
     if not packages:
         console.print("No extra packages configured.")
         return
-    ensure_compose_available()
-    compose_file = compose.write_compose_file(project_root, options)
-    if not compose.service_running(project_root, compose_file):
+    backend, context = write_compose_for_workspace(project_root, config_path, data)
+    if not backend.service_running(context):
         raise RuntimeError("Container is not running. Run 'dsml up' first.")
-    compose.exec(
-        project_root,
-        compose_file,
+    backend.exec(
+        context,
         ["uv", "pip", "install", "--system", *packages],
         user="root",
     )
 
 
 def clean(*, image: bool = False, volumes: bool = False) -> None:
-    project_root, _, data = load_workspace()
-    ensure_compose_available()
-    options, compose_file = write_compose_for_workspace(project_root, data)
-    result = compose.down(project_root, compose_file, volumes=volumes)
+    project_root, config_path, data = load_workspace()
+    backend, context = write_compose_for_workspace(project_root, config_path, data)
+    result = backend.down(context, volumes=volumes)
     ensure_success(result, f"remove Compose project {compose.compose_project_name(project_root)}")
     console.print(f"Removed Compose project {compose.compose_project_name(project_root)}")
     if image:
-        docker.remove_image(options.image)
-        console.print(f"Removed image {options.image}")
+        docker.remove_image(context.options.image)
+        console.print(f"Removed image {context.options.image}")
     if volumes:
-        console.print(f"Removed volume {options.home_volume}")
+        console.print(f"Removed volume {context.options.home_volume}")
 
 
 def nuke(*, confirmation: str) -> None:
     if confirmation != "DELETE":
         console.print("Aborted.")
         return
-    project_root, _, data = load_workspace()
-    ensure_compose_available()
-    options, compose_file = write_compose_for_workspace(project_root, data)
-    result = compose.down(project_root, compose_file, volumes=True)
+    project_root, config_path, data = load_workspace()
+    backend, context = write_compose_for_workspace(project_root, config_path, data)
+    result = backend.down(context, volumes=True)
     ensure_success(result, f"remove Compose project {compose.compose_project_name(project_root)}")
-    docker.remove_volume(options.home_volume)
+    docker.remove_volume(context.options.home_volume)
     console.print(f"Deleted Compose project and home volume for {project_root}")
+
+
+def status() -> WorkspaceStatus:
+    project_root, config_path, data = load_workspace()
+    backend, context = write_compose_for_workspace(project_root, config_path, data)
+    return WorkspaceStatus(
+        backend=backend.name,
+        project_name=compose.compose_project_name(project_root),
+        container_name=context.options.container_name,
+        image=context.options.image,
+        running=backend.service_running(context),
+        config_path=config_path,
+        compose_file=context.compose_file,
+        url=workspace_url(context.options),
+    )
+
+
+def compose_path_for_workspace() -> Path:
+    project_root, _, _ = load_workspace()
+    return compose.compose_path(project_root)
+
+
+def compose_config() -> None:
+    project_root, config_path, data = load_workspace()
+    backend, context = write_compose_for_workspace(project_root, config_path, data)
+    result = backend.config(context)
+    ensure_success(result, f"render Compose config for {compose.compose_project_name(project_root)}")
+
+
+def compose_ps() -> None:
+    project_root, config_path, data = load_workspace()
+    backend, context = write_compose_for_workspace(project_root, config_path, data)
+    result = backend.ps(context)
+    ensure_success(result, f"show Compose services for {compose.compose_project_name(project_root)}")
 
 
 def prepare_image(
@@ -352,7 +445,7 @@ def should_build_image(image: str) -> bool:
 
 
 def container_signature(
-    options: docker.DockerRunOptions,
+    options: RuntimeOptions,
     *,
     image_id: str,
     token_policy: object,
@@ -383,36 +476,17 @@ def container_signature(
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def options_with_container_token(options: docker.DockerRunOptions) -> docker.DockerRunOptions:
+def options_with_container_token(options: RuntimeOptions) -> RuntimeOptions:
     token = docker.container_env_value(options.container_name, "JUPYTER_TOKEN")
     if token is None:
         return options
     return replace(options, token=token)
 
 
-def project_containers(project_root: Path, current_container: str) -> list[str]:
-    containers = docker.list_project_containers(project_root)
-    if current_container not in containers and docker.container_exists(current_container):
-        containers.append(current_container)
-    return list(dict.fromkeys(containers))
-
-
-def stop_container(container_name: str) -> None:
-    if not docker.container_exists(container_name):
-        console.print(f"No container found for {container_name}.")
-        return
-    if not docker.container_running(container_name):
-        console.print(f"Already stopped {container_name}")
-        return
-    result = docker.stop_container(container_name)
-    ensure_success(result, f"stop container {container_name}")
-    console.print(f"Stopped {container_name}")
-
-
 def ensure_success(result: subprocess.CompletedProcess[str], action: str) -> None:
     if result.returncode == 0:
         return
-    detail = (result.stderr or result.stdout).strip()
+    detail = (result.stderr or result.stdout or "").strip()
     message = f"Failed to {action}."
     if detail:
         message = f"{message} {detail}"
@@ -433,7 +507,7 @@ def prepare_workspace(mount_path: Path) -> None:
     raise RuntimeError(f"Workspace mount is not writable: {mount_path}")
 
 
-def wait_for_jupyter(options: docker.DockerRunOptions, *, attempts: int = 30, sleep_seconds: float = 1.0) -> bool:
+def wait_for_jupyter(options: RuntimeOptions, *, attempts: int = 30, sleep_seconds: float = 1.0) -> bool:
     url = workspace_url(options, api=True)
     for _ in range(attempts):
         try:
@@ -445,7 +519,7 @@ def wait_for_jupyter(options: docker.DockerRunOptions, *, attempts: int = 30, sl
     return False
 
 
-def workspace_url(options: docker.DockerRunOptions, *, api: bool = False) -> str:
+def workspace_url(options: RuntimeOptions, *, api: bool = False) -> str:
     base = options.base_url if options.base_url.startswith("/") else f"/{options.base_url}"
     path = f"{base.rstrip('/')}/api/status" if api else base
     token = f"?token={options.token}" if options.token else ""
