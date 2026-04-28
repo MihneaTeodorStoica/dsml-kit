@@ -85,6 +85,8 @@ jobs:
           tags: |
             type=raw,value=weekly
             type=raw,value=minimal-weekly
+            type=raw,value=gpu-weekly
+            type=raw,value=full-weekly
             type=sha,format=short
             type=raw,value={{date 'YYYY-MM-DD'}}
 

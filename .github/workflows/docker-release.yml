@@ -88,6 +88,8 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=minimal,enable={{is_default_branch}}
+            type=raw,value=gpu,enable={{is_default_branch}}
+            type=raw,value=full,enable={{is_default_branch}}
             type=ref,event=tag
             type=sha,format=short
             type=raw,value={{date 'YYYY-MM-DD'}}
