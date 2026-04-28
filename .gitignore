@@ -1,5 +1,6 @@
 .env
 dsml.toml
+.dsml/
 .venv/
 .pytest_cache/
 __pycache__/

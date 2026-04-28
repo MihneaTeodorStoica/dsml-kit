@@ -14,7 +14,7 @@ import webbrowser
 
 from rich.console import Console
 
-from dsml import config, docker, images, paths, profiles
+from dsml import compose, config, docker, images, paths, profiles
 
 
 console = Console()
@@ -94,8 +94,55 @@ def run_options(
     )
 
 
+def ensure_compose_available() -> None:
+    if docker.compose_cli_exists():
+        return
+    raise RuntimeError("Docker Compose v2 is required. Install Docker with the `docker compose` plugin.")
+
+
+def write_compose_for_workspace(
+    project_root: Path,
+    data: dict,
+    *,
+    attach: bool = False,
+    dev: bool = False,
+) -> tuple[docker.DockerRunOptions, Path]:
+    options = run_options(project_root, data, attach=attach, dev=dev)
+    return options, compose.write_compose_file(project_root, options)
+
+
+def options_with_matching_container_token(
+    options: docker.DockerRunOptions,
+    token_policy: object,
+) -> docker.DockerRunOptions:
+    if str(token_policy or "auto").strip() != "auto":
+        return options
+    if not docker.container_exists(options.container_name):
+        return options
+    current_signature = docker.container_label(options.container_name, paths.RUN_SIGNATURE_LABEL)
+    if current_signature != options.run_signature:
+        return options
+    return options_with_container_token(options)
+
+
+def remove_legacy_container_for_compose(options: docker.DockerRunOptions) -> None:
+    if not docker.container_exists(options.container_name):
+        return
+
+    project_name = paths.project_name(options.project_root)
+    if docker.container_label(options.container_name, compose.COMPOSE_PROJECT_LABEL) == project_name:
+        return
+    if docker.container_label(options.container_name, paths.PROJECT_LABEL) != project_name:
+        return
+
+    console.print(f"Recreating {options.container_name} under Docker Compose.")
+    result = docker.remove_container(options.container_name, force=True)
+    ensure_success(result, f"remove legacy container {options.container_name}")
+
+
 def up(*, attach: bool = False, build: bool = False, pull: bool = False, dev: bool = False) -> None:
     project_root, _, data = load_workspace()
+    ensure_compose_available()
     options = run_options(project_root, data, attach=attach, dev=dev)
 
     prepare_image(
@@ -113,31 +160,12 @@ def up(*, attach: bool = False, build: bool = False, pull: bool = False, dev: bo
             token_policy=data["workspace"].get("jupyter_token"),
         ),
     )
+    options = options_with_matching_container_token(options, data["workspace"].get("jupyter_token"))
 
     prepare_workspace(options.mount_path)
-
-    if docker.container_exists(options.container_name):
-        current_signature = docker.container_label(options.container_name, paths.RUN_SIGNATURE_LABEL)
-        if current_signature == options.run_signature:
-            existing_options = options_with_container_token(options)
-            if docker.container_running(options.container_name):
-                console.print(f"[green]Running[/green] {options.container_name}")
-                console.print(workspace_url(existing_options))
-                return
-            docker.start_existing_container(options.container_name, attach=attach)
-            if attach:
-                return
-            if wait_for_jupyter(existing_options):
-                console.print(f"[green]Started[/green] {options.container_name}")
-                console.print(workspace_url(existing_options))
-            else:
-                console.print(f"[yellow]Started[/yellow] {options.container_name}, but Jupyter did not answer yet.")
-                console.print(workspace_url(existing_options))
-            return
-        console.print(f"Recreating {options.container_name} because the workspace settings changed.")
-        docker.remove_container(options.container_name, force=True)
-
-    docker.start_container(options)
+    remove_legacy_container_for_compose(options)
+    compose_file = compose.write_compose_file(project_root, options)
+    compose.up(project_root, compose_file, detach=options.detach)
     if attach:
         return
 
@@ -150,15 +178,16 @@ def up(*, attach: bool = False, build: bool = False, pull: bool = False, dev: bo
 
 
 def down() -> None:
-    project_root, _, data = load_workspace()
-    name = run_options(project_root, data).container_name
-    stop_container(name)
+    stop()
 
 
 def stop() -> None:
     project_root, _, data = load_workspace()
-    name = run_options(project_root, data).container_name
-    stop_container(name)
+    ensure_compose_available()
+    options, compose_file = write_compose_for_workspace(project_root, data)
+    result = compose.stop(project_root, compose_file)
+    ensure_success(result, f"stop Compose project {compose.compose_project_name(project_root)}")
+    console.print(f"Stopped {options.container_name}")
 
 
 def restart(*, attach: bool = False) -> None:
@@ -168,17 +197,19 @@ def restart(*, attach: bool = False) -> None:
 
 def logs(*, follow: bool = False, tail: int | None = None) -> None:
     project_root, _, data = load_workspace()
-    name = run_options(project_root, data).container_name
-    docker.logs(name, follow=follow, tail=tail)
+    ensure_compose_available()
+    _, compose_file = write_compose_for_workspace(project_root, data)
+    compose.logs(project_root, compose_file, follow=follow, tail=tail)
 
 
 def shell(command: str | None = None) -> None:
     project_root, _, data = load_workspace()
-    name = run_options(project_root, data).container_name
+    ensure_compose_available()
+    _, compose_file = write_compose_for_workspace(project_root, data)
     shell_command = [command] if command else ["/bin/bash"]
-    result = docker.exec_in_container(name, shell_command, user="jovyan", interactive=True, check=False)
+    result = compose.exec(project_root, compose_file, shell_command, user="jovyan", interactive=True, check=False)
     if result.returncode != 0 and not command:
-        docker.exec_in_container(name, ["/bin/sh"], user="jovyan", interactive=True)
+        compose.exec(project_root, compose_file, ["/bin/sh"], user="jovyan", interactive=True)
 
 
 def open_workspace() -> None:
@@ -188,17 +219,21 @@ def open_workspace() -> None:
     console.print(workspace_url(options))
 
 
-def add(packages: list[str]) -> None:
-    if not packages:
-        raise RuntimeError("Provide at least one package to add.")
+def add(packages: list[str], requirement_files: list[Path] | None = None) -> None:
     project_root, config_path, data = load_workspace()
-    updated = config.add_packages(config_path, packages)
-    options = run_options(project_root, updated)
+    requirement_specs = config.read_requirement_specs(requirement_files or [])
+    requested = _dedupe([*packages, *requirement_specs])
+    if not requested:
+        raise RuntimeError("Provide packages or at least one requirements file with package specifiers.")
+    updated = config.add_packages(config_path, requested)
+    ensure_compose_available()
+    _, compose_file = write_compose_for_workspace(project_root, updated)
     console.print(f"Updated {config_path.name}")
-    if docker.container_running(options.container_name):
-        docker.exec_in_container(
-            options.container_name,
-            ["uv", "pip", "install", "--system", *packages],
+    if compose.service_running(project_root, compose_file):
+        compose.exec(
+            project_root,
+            compose_file,
+            ["uv", "pip", "install", "--system", *requested],
             user="root",
         )
     else:
@@ -212,10 +247,13 @@ def sync() -> None:
     if not packages:
         console.print("No extra packages configured.")
         return
-    if not docker.container_running(options.container_name):
+    ensure_compose_available()
+    compose_file = compose.write_compose_file(project_root, options)
+    if not compose.service_running(project_root, compose_file):
         raise RuntimeError("Container is not running. Run 'dsml up' first.")
-    docker.exec_in_container(
-        options.container_name,
+    compose.exec(
+        project_root,
+        compose_file,
         ["uv", "pip", "install", "--system", *packages],
         user="root",
     )
@@ -223,22 +261,15 @@ def sync() -> None:
 
 def clean(*, image: bool = False, volumes: bool = False) -> None:
     project_root, _, data = load_workspace()
-    options = run_options(project_root, data)
-    containers = project_containers(project_root, options.container_name)
-    if not containers:
-        console.print("No containers to remove.")
-    for container in containers:
-        if docker.container_running(container):
-            stop_result = docker.stop_container(container)
-            ensure_success(stop_result, f"stop container {container}")
-        remove_result = docker.remove_container(container)
-        ensure_success(remove_result, f"remove container {container}")
-        console.print(f"Removed container {container}")
+    ensure_compose_available()
+    options, compose_file = write_compose_for_workspace(project_root, data)
+    result = compose.down(project_root, compose_file, volumes=volumes)
+    ensure_success(result, f"remove Compose project {compose.compose_project_name(project_root)}")
+    console.print(f"Removed Compose project {compose.compose_project_name(project_root)}")
     if image:
         docker.remove_image(options.image)
         console.print(f"Removed image {options.image}")
     if volumes:
-        docker.remove_volume(options.home_volume)
         console.print(f"Removed volume {options.home_volume}")
 
 
@@ -247,10 +278,12 @@ def nuke(*, confirmation: str) -> None:
         console.print("Aborted.")
         return
     project_root, _, data = load_workspace()
-    options = run_options(project_root, data)
-    docker.remove_container(options.container_name, force=True)
+    ensure_compose_available()
+    options, compose_file = write_compose_for_workspace(project_root, data)
+    result = compose.down(project_root, compose_file, volumes=True)
+    ensure_success(result, f"remove Compose project {compose.compose_project_name(project_root)}")
     docker.remove_volume(options.home_volume)
-    console.print(f"Deleted container and home volume for {project_root}")
+    console.print(f"Deleted Compose project and home volume for {project_root}")
 
 
 def prepare_image(
@@ -442,3 +475,11 @@ def dev_validate() -> None:
 def _auto_value(value: object, default: str) -> str:
     text = str(value or "auto").strip()
     return default if text == "auto" else text
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    for value in values:
+        if value not in deduped:
+            deduped.append(value)
+    return deduped

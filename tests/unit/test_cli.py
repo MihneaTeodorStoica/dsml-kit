@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from typer.testing import CliRunner
 
+from dsml import cli
 from dsml.cli import app
 
 
@@ -26,3 +29,14 @@ def test_init_creates_dsml_toml(tmp_path, monkeypatch):
     assert 'mount = "./workspace"' in text
     assert 'image_policy = "auto"' in text
     assert 'root_dir = "/home/jovyan/work"' in text
+
+
+def test_add_accepts_requirements_file_option(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(cli.runtime, "add", lambda packages, requirements=None: calls.append((packages, requirements)))
+
+    result = runner.invoke(app, ["add", "-r", "requirements.txt"])
+
+    assert result.exit_code == 0
+    assert calls == [([], [Path("requirements.txt")])]

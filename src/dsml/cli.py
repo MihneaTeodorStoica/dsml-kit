@@ -127,11 +127,18 @@ def open_command() -> None:
 
 @app.command()
 def add(
-    packages: Annotated[list[str], typer.Argument(help="Package names or requirement specifiers.")],
+    packages: Annotated[
+        list[str] | None,
+        typer.Argument(help="Package names or requirement specifiers."),
+    ] = None,
+    requirements: Annotated[
+        list[Path] | None,
+        typer.Option("--requirement", "-r", help="Read package specifiers from a requirements.txt file."),
+    ] = None,
 ) -> None:
     """Add packages to dsml.toml and install them in the running container."""
     try:
-        runtime.add(packages)
+        runtime.add(packages or [], requirements)
     except Exception as exc:  # noqa: BLE001
         _handle_error(exc)
 
