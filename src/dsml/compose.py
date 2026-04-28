@@ -7,7 +7,7 @@ from typing import Any
 import yaml
 
 from dsml import docker, paths
-from dsml.options import RuntimeOptions
+from dsml.options import RuntimeOptions, WatchRule
 
 
 SERVICE_NAME = "app"
@@ -74,6 +74,17 @@ def build_compose_model(options: RuntimeOptions) -> dict[str, Any]:
         "environment": environment,
     }
 
+    if options.build_context is not None:
+        build: dict[str, Any] = {
+            "context": _project_path(options.project_root, options.build_context),
+        }
+        if options.build_dockerfile is not None:
+            build["dockerfile"] = _context_path(options.build_context, options.build_dockerfile)
+        service["build"] = build
+
+    if options.watch:
+        service["develop"] = {"watch": [_watch_rule(options.project_root, rule) for rule in options.watch]}
+
     if options.gpu:
         environment["NVIDIA_VISIBLE_DEVICES"] = "all"
         environment["NVIDIA_DRIVER_CAPABILITIES"] = "all"
@@ -122,6 +133,8 @@ def compose_base_args(project_root: Path, compose_file: Path) -> list[str]:
         compose_project_name(project_root),
         "-f",
         str(compose_file),
+        "--project-directory",
+        str(project_root),
     ]
 
 
@@ -213,6 +226,25 @@ def compose_config_args(project_root: Path, compose_file: Path) -> list[str]:
     return [*compose_base_args(project_root, compose_file), "config"]
 
 
+def compose_watch_args(
+    project_root: Path,
+    compose_file: Path,
+    *,
+    no_up: bool = False,
+    prune: bool = True,
+    quiet: bool = False,
+) -> list[str]:
+    args = [*compose_base_args(project_root, compose_file), "watch"]
+    if no_up:
+        args.append("--no-up")
+    if not prune:
+        args.append("--prune=false")
+    if quiet:
+        args.append("--quiet")
+    args.append(SERVICE_NAME)
+    return args
+
+
 def up(
     project_root: Path,
     compose_file: Path,
@@ -295,3 +327,42 @@ def ps(project_root: Path, compose_file: Path) -> subprocess.CompletedProcess[st
 
 def config(project_root: Path, compose_file: Path) -> subprocess.CompletedProcess[str]:
     return docker.run(compose_config_args(project_root, compose_file), check=False)
+
+
+def watch(
+    project_root: Path,
+    compose_file: Path,
+    *,
+    no_up: bool = False,
+    prune: bool = True,
+    quiet: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    return docker.run(
+        compose_watch_args(project_root, compose_file, no_up=no_up, prune=prune, quiet=quiet),
+        check=True,
+        capture=False,
+    )
+
+
+def _project_path(project_root: Path, path: Path) -> str:
+    return _relative_or_absolute(project_root, path)
+
+
+def _context_path(context: Path, path: Path) -> str:
+    return _relative_or_absolute(context, path)
+
+
+def _watch_rule(project_root: Path, rule: WatchRule) -> dict[str, str]:
+    return {
+        "action": rule.action,
+        "path": _project_path(project_root, rule.path),
+    }
+
+
+def _relative_or_absolute(base: Path, path: Path) -> str:
+    resolved_base = base.resolve()
+    resolved_path = path.resolve()
+    try:
+        return resolved_path.relative_to(resolved_base).as_posix() or "."
+    except ValueError:
+        return str(resolved_path)

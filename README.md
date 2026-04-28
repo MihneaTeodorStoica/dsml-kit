@@ -269,6 +269,17 @@ uv run dsml image build --dev
 uv run dsml up --dev --build
 ```
 
+Watch the runtime image source and rebuild the running service when
+`images/base/` or `.dockerignore` changes:
+
+```bash
+uv run dsml watch --dev
+```
+
+Compose Watch requires Docker Compose 2.22 or newer. The command is intended
+for local runtime image development; normal notebook projects should keep using
+`dsml up`.
+
 Other image helpers:
 
 ```bash
@@ -473,7 +484,7 @@ uv run dsml image remove dsml-kit:latest
 
 ## Runtime Backend
 
-The CLI lifecycle is routed through a runtime backend layer. The default and only supported backend is `compose`, which writes `.dsml/compose.yaml` from `dsml.toml` and then calls Docker Compose v2 for `up`, `stop`, `logs`, `exec`, `down`, status checks, and debug config rendering.
+The CLI lifecycle is routed through a runtime backend layer. The default and only supported backend is `compose`, which writes `.dsml/compose.yaml` from `dsml.toml` and then calls Docker Compose v2 for `up`, `watch`, `stop`, `logs`, `exec`, `down`, status checks, and debug config rendering.
 
 This keeps the product interface as `dsml` while making the actual workspace lifecycle a normal Compose project under the hood. Dockerfiles still define the runtime image; `dsml.toml` remains the source of truth for workspace settings.
 

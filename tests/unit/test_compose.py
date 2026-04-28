@@ -3,7 +3,7 @@ from pathlib import Path
 import yaml
 
 from dsml import compose, paths
-from dsml.options import RuntimeOptions
+from dsml.options import RuntimeOptions, WatchRule
 
 
 def options(tmp_path, **overrides):
@@ -96,6 +96,35 @@ def test_gpu_compose_model_adds_nvidia_reservation_and_environment(tmp_path):
     ]
 
 
+def test_compose_model_adds_optional_build_and_watch_metadata(tmp_path):
+    image_dir = tmp_path / "images" / "base"
+    dockerfile = image_dir / "Dockerfile"
+    dockerignore = tmp_path / ".dockerignore"
+
+    service = compose.build_compose_model(
+        options(
+            tmp_path,
+            build_context=tmp_path,
+            build_dockerfile=dockerfile,
+            watch=[
+                WatchRule(action="rebuild", path=image_dir),
+                WatchRule(action="rebuild", path=dockerignore),
+            ],
+        )
+    )["services"]["app"]
+
+    assert service["build"] == {
+        "context": ".",
+        "dockerfile": "images/base/Dockerfile",
+    }
+    assert service["develop"] == {
+        "watch": [
+            {"action": "rebuild", "path": "images/base"},
+            {"action": "rebuild", "path": ".dockerignore"},
+        ]
+    }
+
+
 def test_render_compose_yaml_is_deterministic_and_parseable(tmp_path):
     model = compose.build_compose_model(options(tmp_path))
     first = compose.render_compose_yaml(model)
@@ -115,7 +144,16 @@ def test_write_compose_file_uses_project_state_dir(tmp_path):
 
 def test_compose_command_builders_include_project_and_file(tmp_path):
     compose_file = paths.compose_path(tmp_path)
-    base = ["docker", "compose", "-p", paths.project_name(tmp_path), "-f", str(compose_file)]
+    base = [
+        "docker",
+        "compose",
+        "-p",
+        paths.project_name(tmp_path),
+        "-f",
+        str(compose_file),
+        "--project-directory",
+        str(tmp_path),
+    ]
 
     assert compose.compose_base_args(tmp_path, compose_file) == base
     assert compose.compose_up_args(tmp_path, compose_file, detach=True) == [*base, "up", "-d"]
@@ -171,3 +209,12 @@ def test_compose_command_builders_include_project_and_file(tmp_path):
         "running",
     ]
     assert compose.compose_config_args(tmp_path, compose_file) == [*base, "config"]
+    assert compose.compose_watch_args(tmp_path, compose_file) == [*base, "watch", "app"]
+    assert compose.compose_watch_args(tmp_path, compose_file, no_up=True, prune=False, quiet=True) == [
+        *base,
+        "watch",
+        "--no-up",
+        "--prune=false",
+        "--quiet",
+        "app",
+    ]

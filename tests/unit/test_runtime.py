@@ -295,6 +295,53 @@ def test_up_removes_legacy_dsml_container_before_compose_up(tmp_path, monkeypatc
     assert calls == [("remove", paths.default_container_name(tmp_path), True), ("up", True)]
 
 
+def test_watch_writes_build_watch_compose_file_and_runs_compose_watch(tmp_path, monkeypatch):
+    data = config.default_config(image="dsml-kit:dev")
+    data["workspace"]["image_policy"] = "build"
+    write_workspace(tmp_path, data)
+    image_dir = tmp_path / "images" / "base"
+    image_dir.mkdir(parents=True)
+    (image_dir / "Dockerfile").write_text("FROM example\n")
+    (image_dir / "requirements.txt").write_text("\n")
+    (tmp_path / ".dockerignore").write_text(".git\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(runtime.paths, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(runtime.docker, "image_id", lambda image: "sha256:test")
+    monkeypatch.setattr(runtime.docker, "container_exists", lambda name: False)
+    calls = []
+
+    monkeypatch.setattr(
+        runtime.compose,
+        "watch",
+        lambda project_root, compose_file, **kwargs: calls.append((project_root, compose_file, kwargs))
+        or completed(["docker", "compose", "watch"]),
+    )
+
+    runtime.watch(no_up=True, prune=False, quiet=True)
+
+    service = read_compose_file(tmp_path)["services"]["app"]
+    assert service["build"] == {"context": ".", "dockerfile": "images/base/Dockerfile"}
+    assert service["develop"]["watch"] == [
+        {"action": "rebuild", "path": "images/base"},
+        {"action": "rebuild", "path": ".dockerignore"},
+    ]
+    assert calls == [
+        (
+            tmp_path,
+            paths.compose_path(tmp_path),
+            {"no_up": True, "prune": False, "quiet": True},
+        )
+    ]
+
+
+def test_watch_requires_local_build_image_policy(tmp_path, monkeypatch):
+    write_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(runtime.RuntimeError, match="image_policy"):
+        runtime.watch()
+
+
 def test_down_stops_without_removing_project(tmp_path, monkeypatch):
     write_workspace(tmp_path)
     monkeypatch.chdir(tmp_path)

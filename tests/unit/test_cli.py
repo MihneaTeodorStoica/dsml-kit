@@ -73,6 +73,24 @@ def test_up_accepts_compose_runtime_flags(monkeypatch):
     ]
 
 
+def test_watch_accepts_compose_watch_flags(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(cli.runtime, "watch", lambda **kwargs: calls.append(kwargs))
+
+    result = runner.invoke(app, ["watch", "--dev", "--no-up", "--no-prune", "--quiet"])
+
+    assert result.exit_code == 0
+    assert calls == [
+        {
+            "dev": True,
+            "no_up": True,
+            "prune": False,
+            "quiet": True,
+        }
+    ]
+
+
 def test_status_command_renders_backend_status(monkeypatch, tmp_path):
     monkeypatch.setattr(
         cli.runtime,

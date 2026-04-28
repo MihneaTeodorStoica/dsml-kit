@@ -73,6 +73,15 @@ class RuntimeBackend(Protocol):
 
     def config(self, context: WorkspaceContext) -> subprocess.CompletedProcess[str]: ...
 
+    def watch(
+        self,
+        context: WorkspaceContext,
+        *,
+        no_up: bool = False,
+        prune: bool = True,
+        quiet: bool = False,
+    ) -> subprocess.CompletedProcess[str]: ...
+
 
 @dataclass(frozen=True)
 class ComposeBackend:
@@ -150,6 +159,16 @@ class ComposeBackend:
 
     def config(self, context: WorkspaceContext) -> subprocess.CompletedProcess[str]:
         return compose.config(context.project_root, context.compose_file)
+
+    def watch(
+        self,
+        context: WorkspaceContext,
+        *,
+        no_up: bool = False,
+        prune: bool = True,
+        quiet: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        return compose.watch(context.project_root, context.compose_file, no_up=no_up, prune=prune, quiet=quiet)
 
 
 def backend_name(data: dict) -> str:

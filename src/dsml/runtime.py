@@ -15,7 +15,7 @@ import webbrowser
 from rich.console import Console
 
 from dsml import backends, compose, config, docker, images, paths, profiles
-from dsml.options import RuntimeOptions
+from dsml.options import RuntimeOptions, WatchRule
 
 
 console = Console()
@@ -240,6 +240,45 @@ def up(
         console.print(workspace_url(options))
 
 
+def watch(
+    *,
+    dev: bool = False,
+    no_up: bool = False,
+    prune: bool = True,
+    quiet: bool = False,
+) -> None:
+    project_root, config_path, data = load_workspace()
+    backend = runtime_backend(data)
+    try:
+        backend.ensure_available()
+    except backends.BackendError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    options = run_options(project_root, data, dev=dev)
+    image_policy = str(data["workspace"].get("image_policy", "auto")).strip().lower()
+    if not dev and image_policy != "build" and not should_build_image(options.image):
+        raise RuntimeError(
+            "Compose watch rebuilds a local runtime image. "
+            "Use the dev profile, set [workspace].image_policy to 'build', or pass --dev."
+        )
+    options = options_with_runtime_image_source(options)
+    options = replace(
+        options,
+        run_signature=container_signature(
+            options,
+            image_id=docker.image_id(options.image),
+            token_policy=data["workspace"].get("jupyter_token"),
+        ),
+    )
+    options = options_with_matching_container_token(options, data["workspace"].get("jupyter_token"))
+
+    prepare_workspace(options.mount_path)
+    remove_legacy_container_for_compose(options)
+    context = workspace_context(project_root, config_path, data, dev=dev, options=options)
+    backend.write_config(context)
+    backend.watch(context, no_up=no_up, prune=prune, quiet=quiet)
+
+
 def down() -> None:
     stop()
 
@@ -442,6 +481,27 @@ def ensure_local_image(image: str) -> None:
 
 def should_build_image(image: str) -> bool:
     return image == images.DEFAULT_DEV_IMAGE
+
+
+def options_with_runtime_image_source(options: RuntimeOptions) -> RuntimeOptions:
+    source_root = paths.repo_root()
+    dockerfile = source_root / "images" / "base" / "Dockerfile"
+    image_requirements = source_root / "images" / "base" / "requirements.txt"
+    dockerignore = source_root / ".dockerignore"
+    if not dockerfile.is_file() or not image_requirements.is_file():
+        raise RuntimeError(
+            "Compose watch requires the runtime image source tree. "
+            "Run it from a dsml-kit source checkout or use a published image with 'dsml up'."
+        )
+    return replace(
+        options,
+        build_context=source_root,
+        build_dockerfile=dockerfile,
+        watch=[
+            WatchRule(action="rebuild", path=dockerfile.parent),
+            WatchRule(action="rebuild", path=dockerignore),
+        ],
+    )
 
 
 def container_signature(

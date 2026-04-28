@@ -2,6 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
+
+
+WatchAction = Literal["rebuild"]
+
+
+@dataclass(frozen=True)
+class WatchRule:
+    action: WatchAction
+    path: Path
 
 
 @dataclass(frozen=True)
@@ -25,3 +35,6 @@ class RuntimeOptions:
     detach: bool = True
     restart_policy: str = "unless-stopped"
     run_signature: str = ""
+    build_context: Path | None = None
+    build_dockerfile: Path | None = None
+    watch: list[WatchRule] = field(default_factory=list)
