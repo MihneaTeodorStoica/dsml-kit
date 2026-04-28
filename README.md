@@ -38,7 +38,7 @@ dsml init --profile minimal
 dsml up
 ```
 
-`dsml init` creates `dsml.toml`. `dsml up` starts a container, mounts `./workspace/` at `/home/jovyan/work`, creates a persistent Docker volume for `/home/jovyan`, and prints the JupyterLab URL.
+`dsml init` creates `dsml.toml`. `dsml up` starts a container, mounts `./workspace/` at `/home/jovyan/work`, creates a persistent Docker volume for `/home/jovyan`, and prints the JupyterLab URL. If the configured image is missing locally, `dsml up` pulls it automatically.
 
 ## Profiles
 
@@ -65,6 +65,7 @@ dsml logs --follow
 dsml shell
 dsml stop
 dsml down
+dsml clean
 ```
 
 Useful options:
@@ -210,5 +211,7 @@ dsml clean --image
 dsml clean --volumes
 dsml nuke
 ```
+
+`dsml down` stops the current project container and keeps it around for the next `dsml up`. `dsml clean` stops and removes project containers. `dsml up` reuses an existing matching container and recreates it when the workspace settings or selected image change.
 
 `dsml nuke` requires typing `DELETE` before it removes the project container and persistent home volume.

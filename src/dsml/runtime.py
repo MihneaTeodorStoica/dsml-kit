@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
+import hashlib
+import json
 from pathlib import Path
 import os
 import socket
@@ -99,26 +102,38 @@ def up(*, attach: bool = False, build: bool = False, pull: bool = False, dev: bo
         images.build_image(tag=options.image, dev=dev)
     if pull:
         images.pull_image(options.image)
-    if not docker.image_exists(options.image):
-        if options.image == images.DEFAULT_DEV_IMAGE:
-            raise RuntimeError(
-                f"Image {options.image} is not present locally. "
-                "Run 'dsml image build --dev' or start with 'dsml up --dev --build'."
-            )
-        raise RuntimeError(
-            f"Image {options.image} is not present locally. "
-            "Run 'dsml image pull' or start with 'dsml up --pull'."
-        )
+    ensure_image_available(options.image)
+    options = replace(
+        options,
+        run_signature=container_signature(
+            options,
+            image_id=docker.image_id(options.image),
+            token_policy=data["workspace"].get("jupyter_token"),
+        ),
+    )
 
     prepare_workspace(options.mount_path)
 
-    if docker.container_running(options.container_name):
-        console.print(f"[green]Running[/green] {options.container_name}")
-        console.print(workspace_url(options))
-        return
-
     if docker.container_exists(options.container_name):
-        docker.remove_container(options.container_name)
+        current_signature = docker.container_label(options.container_name, paths.RUN_SIGNATURE_LABEL)
+        if current_signature == options.run_signature:
+            existing_options = options_with_container_token(options)
+            if docker.container_running(options.container_name):
+                console.print(f"[green]Running[/green] {options.container_name}")
+                console.print(workspace_url(existing_options))
+                return
+            docker.start_existing_container(options.container_name, attach=attach)
+            if attach:
+                return
+            if wait_for_jupyter(existing_options):
+                console.print(f"[green]Started[/green] {options.container_name}")
+                console.print(workspace_url(existing_options))
+            else:
+                console.print(f"[yellow]Started[/yellow] {options.container_name}, but Jupyter did not answer yet.")
+                console.print(workspace_url(existing_options))
+            return
+        console.print(f"Recreating {options.container_name} because the workspace settings changed.")
+        docker.remove_container(options.container_name, force=True)
 
     docker.start_container(options)
     if attach:
@@ -135,15 +150,13 @@ def up(*, attach: bool = False, build: bool = False, pull: bool = False, dev: bo
 def down() -> None:
     project_root, _, data = load_workspace()
     name = run_options(project_root, data).container_name
-    docker.remove_container(name, force=True)
-    console.print(f"Removed {name}")
+    stop_container(name)
 
 
 def stop() -> None:
     project_root, _, data = load_workspace()
     name = run_options(project_root, data).container_name
-    docker.stop_container(name)
-    console.print(f"Stopped {name}")
+    stop_container(name)
 
 
 def restart(*, attach: bool = False) -> None:
@@ -209,9 +222,16 @@ def sync() -> None:
 def clean(*, image: bool = False, volumes: bool = False) -> None:
     project_root, _, data = load_workspace()
     options = run_options(project_root, data)
-    for container in docker.list_project_containers(project_root):
-        docker.remove_container(container)
-        console.print(f"Removed stopped container {container}")
+    containers = project_containers(project_root, options.container_name)
+    if not containers:
+        console.print("No containers to remove.")
+    for container in containers:
+        if docker.container_running(container):
+            stop_result = docker.stop_container(container)
+            ensure_success(stop_result, f"stop container {container}")
+        remove_result = docker.remove_container(container)
+        ensure_success(remove_result, f"remove container {container}")
+        console.print(f"Removed container {container}")
     if image:
         docker.remove_image(options.image)
         console.print(f"Removed image {options.image}")
@@ -229,6 +249,91 @@ def nuke(*, confirmation: str) -> None:
     docker.remove_container(options.container_name, force=True)
     docker.remove_volume(options.home_volume)
     console.print(f"Deleted container and home volume for {project_root}")
+
+
+def ensure_image_available(image: str) -> None:
+    if docker.image_exists(image):
+        return
+    if image == images.DEFAULT_DEV_IMAGE:
+        raise RuntimeError(
+            f"Image {image} is not present locally. "
+            "Run 'dsml image build --dev' or start with 'dsml up --dev --build'."
+        )
+    console.print(f"Pulling {image} because it is not present locally.")
+    try:
+        images.pull_image(image)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"Image {image} is not present locally and automatic pull failed.") from exc
+    if not docker.image_exists(image):
+        raise RuntimeError(f"Image {image} is still not present after pull.")
+
+
+def container_signature(
+    options: docker.DockerRunOptions,
+    *,
+    image_id: str,
+    token_policy: object,
+) -> str:
+    raw_token = str(token_policy or "auto").strip()
+    token = "auto" if raw_token == "auto" else options.token
+    payload = {
+        "app_log_level": options.app_log_level,
+        "base_url": options.base_url,
+        "bind_address": options.bind_address,
+        "container_name": options.container_name,
+        "extra_args": options.extra_args,
+        "gpu": options.gpu,
+        "home_volume": options.home_volume,
+        "host_gid": options.host_gid,
+        "host_uid": options.host_uid,
+        "image": options.image,
+        "image_id": image_id,
+        "mount_path": str(options.mount_path),
+        "port": options.port,
+        "project_root": str(options.project_root),
+        "restart_policy": options.restart_policy,
+        "root_dir": options.root_dir,
+        "server_log_level": options.server_log_level,
+        "token": token,
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def options_with_container_token(options: docker.DockerRunOptions) -> docker.DockerRunOptions:
+    token = docker.container_env_value(options.container_name, "JUPYTER_TOKEN")
+    if token is None:
+        return options
+    return replace(options, token=token)
+
+
+def project_containers(project_root: Path, current_container: str) -> list[str]:
+    containers = docker.list_project_containers(project_root)
+    if current_container not in containers and docker.container_exists(current_container):
+        containers.append(current_container)
+    return list(dict.fromkeys(containers))
+
+
+def stop_container(container_name: str) -> None:
+    if not docker.container_exists(container_name):
+        console.print(f"No container found for {container_name}.")
+        return
+    if not docker.container_running(container_name):
+        console.print(f"Already stopped {container_name}")
+        return
+    result = docker.stop_container(container_name)
+    ensure_success(result, f"stop container {container_name}")
+    console.print(f"Stopped {container_name}")
+
+
+def ensure_success(result: subprocess.CompletedProcess[str], action: str) -> None:
+    if result.returncode == 0:
+        return
+    detail = (result.stderr or result.stdout).strip()
+    message = f"Failed to {action}."
+    if detail:
+        message = f"{message} {detail}"
+    raise RuntimeError(message)
 
 
 def resolve_gpu(config_value: bool | str, profile_value: bool | str) -> bool:

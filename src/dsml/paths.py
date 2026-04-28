@@ -10,6 +10,7 @@ from pathlib import Path
 CONFIG_FILE = "dsml.toml"
 PROJECT_LABEL = "dsml.project"
 CONFIG_LABEL = "dsml.config"
+RUN_SIGNATURE_LABEL = "dsml.run-signature"
 
 
 def cwd() -> Path:

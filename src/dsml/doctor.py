@@ -52,7 +52,7 @@ def run_checks(start: Path | None = None) -> list[Check]:
             _check(
                 "Image",
                 docker.image_exists(image),
-                f"{image} is not present locally. Run 'dsml image pull'.",
+                f"{image} is not present locally. 'dsml up' will try to pull it.",
             )
         )
     else:
