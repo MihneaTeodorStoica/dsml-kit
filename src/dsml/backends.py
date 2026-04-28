@@ -6,6 +6,7 @@ import subprocess
 from typing import Protocol
 
 from dsml import compose, docker
+from dsml.options import RuntimeOptions
 
 
 SUPPORTED_BACKENDS = {"compose"}
@@ -20,7 +21,7 @@ class WorkspaceContext:
     project_root: Path
     config_path: Path
     data: dict
-    options: docker.DockerRunOptions
+    options: RuntimeOptions
     compose_file: Path
 
 

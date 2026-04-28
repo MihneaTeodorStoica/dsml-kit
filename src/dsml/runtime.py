@@ -15,6 +15,7 @@ import webbrowser
 from rich.console import Console
 
 from dsml import backends, compose, config, docker, images, paths, profiles
+from dsml.options import RuntimeOptions
 
 
 console = Console()
@@ -72,7 +73,7 @@ def run_options(
     *,
     attach: bool = False,
     dev: bool = False,
-) -> docker.DockerRunOptions:
+) -> RuntimeOptions:
     workspace = data["workspace"]
     jupyter = data["jupyter"]
     profile = profiles.resolve_profile(workspace["profile"])
@@ -85,7 +86,7 @@ def run_options(
         workspace.get("home_volume"),
         paths.default_home_volume(project_root),
     )
-    return docker.DockerRunOptions(
+    return RuntimeOptions(
         image=image,
         container_name=container_name,
         project_root=project_root,
@@ -120,7 +121,7 @@ def workspace_context(
     *,
     attach: bool = False,
     dev: bool = False,
-    options: docker.DockerRunOptions | None = None,
+    options: RuntimeOptions | None = None,
 ) -> backends.WorkspaceContext:
     resolved_options = options or run_options(project_root, data, attach=attach, dev=dev)
     return backends.WorkspaceContext(
@@ -151,9 +152,9 @@ def write_compose_for_workspace(
 
 
 def options_with_matching_container_token(
-    options: docker.DockerRunOptions,
+    options: RuntimeOptions,
     token_policy: object,
-) -> docker.DockerRunOptions:
+) -> RuntimeOptions:
     if str(token_policy or "auto").strip() != "auto":
         return options
     if not docker.container_exists(options.container_name):
@@ -164,7 +165,7 @@ def options_with_matching_container_token(
     return options_with_container_token(options)
 
 
-def remove_legacy_container_for_compose(options: docker.DockerRunOptions) -> None:
+def remove_legacy_container_for_compose(options: RuntimeOptions) -> None:
     if not docker.container_exists(options.container_name):
         return
 
@@ -444,7 +445,7 @@ def should_build_image(image: str) -> bool:
 
 
 def container_signature(
-    options: docker.DockerRunOptions,
+    options: RuntimeOptions,
     *,
     image_id: str,
     token_policy: object,
@@ -475,30 +476,11 @@ def container_signature(
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def options_with_container_token(options: docker.DockerRunOptions) -> docker.DockerRunOptions:
+def options_with_container_token(options: RuntimeOptions) -> RuntimeOptions:
     token = docker.container_env_value(options.container_name, "JUPYTER_TOKEN")
     if token is None:
         return options
     return replace(options, token=token)
-
-
-def project_containers(project_root: Path, current_container: str) -> list[str]:
-    containers = docker.list_project_containers(project_root)
-    if current_container not in containers and docker.container_exists(current_container):
-        containers.append(current_container)
-    return list(dict.fromkeys(containers))
-
-
-def stop_container(container_name: str) -> None:
-    if not docker.container_exists(container_name):
-        console.print(f"No container found for {container_name}.")
-        return
-    if not docker.container_running(container_name):
-        console.print(f"Already stopped {container_name}")
-        return
-    result = docker.stop_container(container_name)
-    ensure_success(result, f"stop container {container_name}")
-    console.print(f"Stopped {container_name}")
 
 
 def ensure_success(result: subprocess.CompletedProcess[str], action: str) -> None:
@@ -525,7 +507,7 @@ def prepare_workspace(mount_path: Path) -> None:
     raise RuntimeError(f"Workspace mount is not writable: {mount_path}")
 
 
-def wait_for_jupyter(options: docker.DockerRunOptions, *, attempts: int = 30, sleep_seconds: float = 1.0) -> bool:
+def wait_for_jupyter(options: RuntimeOptions, *, attempts: int = 30, sleep_seconds: float = 1.0) -> bool:
     url = workspace_url(options, api=True)
     for _ in range(attempts):
         try:
@@ -537,7 +519,7 @@ def wait_for_jupyter(options: docker.DockerRunOptions, *, attempts: int = 30, sl
     return False
 
 
-def workspace_url(options: docker.DockerRunOptions, *, api: bool = False) -> str:
+def workspace_url(options: RuntimeOptions, *, api: bool = False) -> str:
     base = options.base_url if options.base_url.startswith("/") else f"/{options.base_url}"
     path = f"{base.rstrip('/')}/api/status" if api else base
     token = f"?token={options.token}" if options.token else ""

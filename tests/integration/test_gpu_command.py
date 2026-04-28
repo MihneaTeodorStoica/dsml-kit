@@ -1,9 +1,10 @@
-from dsml import compose, docker
+from dsml import compose
+from dsml.options import RuntimeOptions
 
 
 def test_gpu_compose_model_requests_all_gpus(tmp_path):
     service = compose.build_compose_model(
-        docker.DockerRunOptions(
+        RuntimeOptions(
             image="dsml-kit:gpu",
             container_name="dsml-gpu-test",
             project_root=tmp_path,

@@ -2,7 +2,8 @@ from pathlib import Path
 
 import yaml
 
-from dsml import compose, docker, paths
+from dsml import compose, paths
+from dsml.options import RuntimeOptions
 
 
 def options(tmp_path, **overrides):
@@ -25,7 +26,7 @@ def options(tmp_path, **overrides):
         "run_signature": "signature-test",
     }
     values.update(overrides)
-    return docker.DockerRunOptions(**values)
+    return RuntimeOptions(**values)
 
 
 def test_compose_model_captures_runtime_contract(tmp_path):

@@ -7,6 +7,7 @@ from typing import Any
 import yaml
 
 from dsml import docker, paths
+from dsml.options import RuntimeOptions
 
 
 SERVICE_NAME = "app"
@@ -25,7 +26,7 @@ def compose_project_name(project_root: Path) -> str:
     return paths.project_name(project_root)
 
 
-def build_compose_model(options: docker.DockerRunOptions) -> dict[str, Any]:
+def build_compose_model(options: RuntimeOptions) -> dict[str, Any]:
     labels = {
         paths.PROJECT_LABEL: paths.project_name(options.project_root),
         paths.CONFIG_LABEL: str(options.project_root / paths.CONFIG_FILE),
@@ -106,7 +107,7 @@ def render_compose_yaml(model: dict[str, Any]) -> str:
     return yaml.safe_dump(model, sort_keys=False, default_flow_style=False)
 
 
-def write_compose_file(project_root: Path, options: docker.DockerRunOptions) -> Path:
+def write_compose_file(project_root: Path, options: RuntimeOptions) -> Path:
     path = compose_path(project_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_compose_yaml(build_compose_model(options)))
