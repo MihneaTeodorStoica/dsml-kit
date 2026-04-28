@@ -7,12 +7,15 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from dsml import __version__
 from dsml import config, doctor, images, profiles, runtime
 
 
 app = typer.Typer(help="Manage profile-based Docker workspaces for data science and ML.")
+compose_app = typer.Typer(help="Inspect the generated Docker Compose backend.")
 image_app = typer.Typer(help="Build, pull, inspect, and remove runtime images.")
 dev_app = typer.Typer(help="Maintainer development commands.")
+app.add_typer(compose_app, name="compose")
 app.add_typer(image_app, name="image")
 app.add_typer(dev_app, name="dev")
 console = Console()
@@ -21,6 +24,23 @@ console = Console()
 def _handle_error(exc: Exception) -> None:
     console.print(f"[red]Error:[/red] {exc}")
     raise typer.Exit(1) from exc
+
+
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    version: Annotated[
+        bool,
+        typer.Option("--version", help="Show the dsml-kit version and exit."),
+    ] = False,
+) -> None:
+    """Manage profile-based Docker workspaces for data science and ML."""
+    if version:
+        console.print(f"dsml-kit {__version__}")
+        raise typer.Exit()
+    if ctx.invoked_subcommand is None:
+        console.print(ctx.get_help())
+        raise typer.Exit()
 
 
 @app.command()
@@ -56,10 +76,27 @@ def up(
         typer.Option(help="Pull the selected image before starting, overriding image_policy."),
     ] = False,
     dev: Annotated[bool, typer.Option(help="Use and build the development image.")] = False,
+    recreate: Annotated[
+        bool,
+        typer.Option("--recreate", help="Force Docker Compose to recreate the service container."),
+    ] = False,
+    wait: Annotated[
+        bool,
+        typer.Option("--wait/--no-wait", help="Wait for Jupyter to answer before returning."),
+    ] = True,
+    wait_timeout: Annotated[int, typer.Option(help="Seconds to wait for Jupyter.")] = 30,
 ) -> None:
     """Start the Docker workspace."""
     try:
-        runtime.up(attach=attach, build=build, pull=pull, dev=dev)
+        runtime.up(
+            attach=attach,
+            build=build,
+            pull=pull,
+            dev=dev,
+            recreate=recreate,
+            wait=wait,
+            wait_timeout=wait_timeout,
+        )
     except Exception as exc:  # noqa: BLE001 - CLI boundary.
         _handle_error(exc)
 
@@ -97,10 +134,12 @@ def restart(
 def logs(
     follow: Annotated[bool, typer.Option("--follow", "-f", help="Follow log output.")] = False,
     tail: Annotated[int | None, typer.Option(help="Number of log lines to show.")] = None,
+    since: Annotated[str | None, typer.Option(help="Show logs since a timestamp or duration, such as 10m.")] = None,
+    timestamps: Annotated[bool, typer.Option(help="Show log timestamps.")] = False,
 ) -> None:
     """Show container logs."""
     try:
-        runtime.logs(follow=follow, tail=tail)
+        runtime.logs(follow=follow, tail=tail, since=since, timestamps=timestamps)
     except Exception as exc:  # noqa: BLE001
         _handle_error(exc)
 
@@ -108,10 +147,12 @@ def logs(
 @app.command()
 def shell(
     command: Annotated[str | None, typer.Argument(help="Optional command to run instead of /bin/bash.")] = None,
+    user: Annotated[str, typer.Option(help="Container user for the shell command.")] = "jovyan",
+    root: Annotated[bool, typer.Option("--root", help="Run the shell command as root.")] = False,
 ) -> None:
     """Open a shell inside the running container."""
     try:
-        runtime.shell(command)
+        runtime.shell(command, user="root" if root else user)
     except Exception as exc:  # noqa: BLE001
         _handle_error(exc)
 
@@ -152,6 +193,27 @@ def sync() -> None:
         _handle_error(exc)
 
 
+@app.command()
+def status() -> None:
+    """Show workspace backend status."""
+    try:
+        status_info = runtime.status()
+    except Exception as exc:  # noqa: BLE001
+        _handle_error(exc)
+    table = Table(show_header=False)
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("Backend", status_info.backend)
+    table.add_row("Project", status_info.project_name)
+    table.add_row("Container", status_info.container_name)
+    table.add_row("Image", status_info.image)
+    table.add_row("State", "[green]running[/green]" if status_info.running else "[yellow]stopped[/yellow]")
+    table.add_row("URL", status_info.url)
+    table.add_row("Config", str(status_info.config_path))
+    table.add_row("Compose", str(status_info.compose_file))
+    console.print(table)
+
+
 def doctor_command() -> None:
     """Print workspace diagnostics."""
     checks = doctor.run_checks()
@@ -167,6 +229,33 @@ def doctor_command() -> None:
 
 
 app.command("doctor")(doctor_command)
+
+
+@compose_app.command("path")
+def compose_path() -> None:
+    """Print the generated Compose file path."""
+    try:
+        console.print(runtime.compose_path_for_workspace())
+    except Exception as exc:  # noqa: BLE001
+        _handle_error(exc)
+
+
+@compose_app.command("config")
+def compose_config() -> None:
+    """Render Docker Compose's normalized config for this workspace."""
+    try:
+        runtime.compose_config()
+    except Exception as exc:  # noqa: BLE001
+        _handle_error(exc)
+
+
+@compose_app.command("ps")
+def compose_ps() -> None:
+    """Show Docker Compose services for this workspace."""
+    try:
+        runtime.compose_ps()
+    except Exception as exc:  # noqa: BLE001
+        _handle_error(exc)
 
 
 @app.command()

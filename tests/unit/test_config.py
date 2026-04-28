@@ -18,6 +18,7 @@ def test_write_and_read_default_config(tmp_path):
     config.write_config(path, data)
 
     written = tomllib.loads(path.read_text())
+    assert written["runtime"]["backend"] == "compose"
     assert written["workspace"]["profile"] == "minimal"
     assert written["workspace"]["port"] == 8899
     assert written["workspace"]["jupyter_token"] == "auto"
@@ -98,4 +99,12 @@ def test_invalid_image_policy_fails_validation():
     data["workspace"]["image_policy"] = "sometimes"
 
     with pytest.raises(config.ConfigError, match="image_policy"):
+        config.validate_config(data)
+
+
+def test_invalid_runtime_backend_fails_validation():
+    data = config.default_config()
+    data["runtime"]["backend"] = "docker"
+
+    with pytest.raises(config.ConfigError, match="runtime.*backend"):
         config.validate_config(data)

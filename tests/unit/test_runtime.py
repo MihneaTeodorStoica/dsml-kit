@@ -180,6 +180,54 @@ def test_up_dev_build_uses_dev_image(tmp_path, monkeypatch):
     assert read_compose_file(tmp_path)["services"]["app"]["image"] == runtime.images.DEFAULT_DEV_IMAGE
 
 
+def test_up_recreate_passes_force_recreate_and_no_wait_skips_probe(tmp_path, monkeypatch):
+    write_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    monkeypatch.setattr(runtime.docker, "image_exists", lambda image: True)
+    monkeypatch.setattr(runtime.docker, "image_id", lambda image: "sha256:test")
+    monkeypatch.setattr(runtime.docker, "container_exists", lambda name: False)
+    monkeypatch.setattr(
+        runtime.compose,
+        "up",
+        lambda project_root, compose_file, detach=True, force_recreate=False: calls.append(
+            ("up", detach, force_recreate)
+        )
+        or completed(["docker", "compose", "up"]),
+    )
+    monkeypatch.setattr(runtime, "wait_for_jupyter", lambda options: pytest.fail("should not wait"))
+
+    runtime.up(recreate=True, wait=False)
+
+    assert calls == [("up", True, True)]
+
+
+def test_up_wait_timeout_controls_jupyter_attempts(tmp_path, monkeypatch):
+    write_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    monkeypatch.setattr(runtime.docker, "image_exists", lambda image: True)
+    monkeypatch.setattr(runtime.docker, "image_id", lambda image: "sha256:test")
+    monkeypatch.setattr(runtime.docker, "container_exists", lambda name: False)
+    monkeypatch.setattr(
+        runtime.compose,
+        "up",
+        lambda project_root, compose_file, detach=True: completed(["docker", "compose", "up"]),
+    )
+
+    def wait_for_jupyter(options, *, attempts=30, sleep_seconds=1.0):
+        calls.append((attempts, sleep_seconds))
+        return True
+
+    monkeypatch.setattr(runtime, "wait_for_jupyter", wait_for_jupyter)
+
+    runtime.up(wait_timeout=7)
+
+    assert calls == [(7, 1.0)]
+
+
 def test_up_reuses_matching_auto_token_in_compose_file(tmp_path, monkeypatch):
     write_workspace(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -279,6 +327,23 @@ def test_logs_uses_compose_logs(tmp_path, monkeypatch):
     runtime.logs(follow=True, tail=25)
 
     assert calls == [("logs", True, 25)]
+
+
+def test_logs_passes_since_and_timestamps(tmp_path, monkeypatch):
+    write_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    monkeypatch.setattr(
+        runtime.compose,
+        "logs",
+        lambda project_root, compose_file, **kwargs: calls.append(kwargs)
+        or completed(["docker", "compose", "logs"]),
+    )
+
+    runtime.logs(since="10m", timestamps=True)
+
+    assert calls == [{"follow": False, "tail": None, "since": "10m", "timestamps": True}]
 
 
 def test_shell_uses_compose_exec_and_falls_back_to_sh(tmp_path, monkeypatch):
@@ -410,4 +475,46 @@ def test_nuke_requires_delete_and_removes_compose_project_and_volume(tmp_path, m
     assert calls == [
         ("down", True),
         ("volume", paths.default_home_volume(tmp_path)),
+    ]
+
+
+def test_status_reports_compose_backend_state(tmp_path, monkeypatch):
+    write_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    monkeypatch.setattr(runtime.compose, "service_running", lambda project_root, compose_file: True)
+
+    status = runtime.status()
+
+    assert status.backend == "compose"
+    assert status.project_name == paths.project_name(tmp_path)
+    assert status.container_name == paths.default_container_name(tmp_path)
+    assert status.compose_file == paths.compose_path(tmp_path)
+    assert status.running is True
+
+
+def test_compose_debug_runtime_commands_call_backend_wrappers(tmp_path, monkeypatch):
+    write_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    monkeypatch.setattr(
+        runtime.compose,
+        "config",
+        lambda project_root, compose_file: calls.append(("config", compose_file))
+        or completed(["docker", "compose", "config"]),
+    )
+    monkeypatch.setattr(
+        runtime.compose,
+        "ps",
+        lambda project_root, compose_file: calls.append(("ps", compose_file))
+        or completed(["docker", "compose", "ps"]),
+    )
+
+    runtime.compose_config()
+    runtime.compose_ps()
+
+    assert calls == [
+        ("config", paths.compose_path(tmp_path)),
+        ("ps", paths.compose_path(tmp_path)),
     ]

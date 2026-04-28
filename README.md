@@ -25,6 +25,7 @@ For local development from this repository:
 ```bash
 uv sync
 uv run dsml --help
+uv run dsml --version
 ```
 
 Docker and Docker Compose v2 are required to run workspaces. Compose v2 means the `docker compose` command, not the legacy `docker-compose` binary. GPU profiles require NVIDIA drivers plus NVIDIA Container Toolkit.
@@ -63,6 +64,7 @@ During early development the profiles may point at the same image tag; the CLI a
 dsml up
 dsml logs --follow
 dsml shell
+dsml status
 dsml stop
 dsml down
 dsml clean
@@ -73,15 +75,23 @@ Useful options:
 ```bash
 dsml up --attach
 dsml up --pull
+dsml up --recreate
+dsml up --no-wait
+dsml up --wait-timeout 60
 dsml up --dev --build
+dsml logs --since 10m --timestamps
+dsml shell --root
 ```
 
-The `--pull` and `--build` flags override the image policy in `dsml.toml` for a single run.
+The `--pull` and `--build` flags override the image policy in `dsml.toml` for a single run. `--recreate` forwards to Docker Compose service recreation, and `--no-wait` skips the Jupyter readiness probe when you want the command to return immediately.
 
 For debugging, inspect the generated Compose file:
 
 ```bash
 cat .dsml/compose.yaml
+dsml compose path
+dsml compose config
+dsml compose ps
 ```
 
 Normally you should not edit this file by hand. It is regenerated from `dsml.toml` whenever `dsml` needs it.
@@ -91,6 +101,9 @@ Normally you should not edit this file by hand. It is regenerated from `dsml.tom
 `dsml.toml` is the workspace config file created by `dsml init`. It is safe to edit by hand.
 
 ```toml
+[runtime]
+backend = "compose"
+
 [workspace]
 profile = "minimal"
 mount = "./workspace"
@@ -113,6 +126,10 @@ extra_args = []
 [packages]
 extra = []
 ```
+
+`[runtime]` selects the workspace backend:
+
+- `backend`: currently `compose`; `dsml` generates and manages Docker Compose from `dsml.toml`
 
 `[workspace]` controls the generated Docker Compose workspace:
 
@@ -209,6 +226,12 @@ The generated Compose service keeps the useful runtime contract from the origina
 - `JUPYTER_TOKEN` support
 - host UID/GID support through `NB_UID` and `NB_GID`
 - healthcheck on port `8888`
+
+## Runtime Backend
+
+The CLI lifecycle is routed through a runtime backend layer. The default and only supported backend is `compose`, which writes `.dsml/compose.yaml` from `dsml.toml` and then calls Docker Compose v2 for `up`, `stop`, `logs`, `exec`, `down`, status checks, and debug config rendering.
+
+This keeps the product interface as `dsml` while making the actual workspace lifecycle a normal Compose project under the hood. Dockerfiles still define the runtime image; `dsml.toml` remains the source of truth for workspace settings.
 
 ## Troubleshooting
 
