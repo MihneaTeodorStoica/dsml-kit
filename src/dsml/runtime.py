@@ -99,6 +99,16 @@ def up(*, attach: bool = False, build: bool = False, pull: bool = False, dev: bo
         images.build_image(tag=options.image, dev=dev)
     if pull:
         images.pull_image(options.image)
+    if not docker.image_exists(options.image):
+        if options.image == images.DEFAULT_DEV_IMAGE:
+            raise RuntimeError(
+                f"Image {options.image} is not present locally. "
+                "Run 'dsml image build --dev' or start with 'dsml up --dev --build'."
+            )
+        raise RuntimeError(
+            f"Image {options.image} is not present locally. "
+            "Run 'dsml image pull' or start with 'dsml up --pull'."
+        )
 
     prepare_workspace(options.mount_path)
 
