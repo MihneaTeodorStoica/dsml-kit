@@ -24,6 +24,7 @@ dsml = "dsml.cli:app"
 
 [dependency-groups]
 dev = [
+  "dsml-kit",
   "pytest>=7.4.4",
 ]
 
@@ -43,3 +44,12 @@ dsml = ["templates/*.toml"]
   "profiles/gpu.toml",
   "profiles/full.toml",
 ]
+
+[tool.uv.workspace]
+members = [
+    ".",
+    ".",
+]
+
+[tool.uv.sources]
+dsml-kit = { workspace = true }
