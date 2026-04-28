@@ -97,7 +97,13 @@ def free_port():
 
 @pytest.fixture(scope="session")
 def image():
-    return os.environ.get("DSML_TEST_IMAGE", "dsml-kit:validate")
+    image_name = os.environ.get("DSML_TEST_IMAGE", "dsml-kit:validate")
+    if shutil.which("docker") is None:
+        pytest.skip("Docker is required for image integration tests.")
+    result = run(["docker", "image", "inspect", image_name], check=False)
+    if result.returncode != 0:
+        pytest.skip(f"Docker image {image_name} is not present. Build it before integration tests.")
+    return image_name
 
 
 @pytest.fixture
@@ -110,56 +116,3 @@ def image_container(request):
     request.addfinalizer(cleanup)
     cleanup()
     return container_name
-
-
-@pytest.fixture
-def compose_runtime(request, tmp_path):
-    project_name = f"dsml-kit-test-{uuid.uuid4().hex[:8]}"
-    container_name = f"dsml-kit-compose-{uuid.uuid4().hex[:8]}"
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    port = free_port()
-    host_uid = os.getuid()
-    host_gid = os.getgid()
-    env = {
-        "COMPOSE_PROJECT_NAME": project_name,
-        "CONTAINER_NAME": container_name,
-        "IMAGE_NAME": os.environ.get("DSML_TEST_IMAGE_NAME", "dsml-kit"),
-        "DSML_TAG": os.environ.get("DSML_TEST_TAG", "validate"),
-        "PULL_POLICY": "never",
-        "RESTART_POLICY": "no",
-        "WORKSPACE_DIR": str(workspace),
-        "JUPYTER_PORT": str(port),
-        "JUPYTER_TOKEN": "validate-token",
-        "HOST_UID": str(host_uid),
-        "HOST_GID": str(host_gid),
-    }
-    compose = ["docker", "compose", "-f", "compose.yaml", "-f", "compose.dev.yaml"]
-
-    def compose_run(*args, check=True, input_text=None):
-        return run([*compose, *args], env=env, input_text=input_text, check=check)
-
-    def diagnostics():
-        ps = compose_run("ps", check=False).stdout
-        logs = compose_run("logs", "app", check=False).stdout
-        inspect = docker_inspect(container_name)
-        return f"compose ps:\n{ps}\ncompose logs:\n{logs}\ninspect:\n{inspect}"
-
-    def cleanup():
-        compose_run("down", "--remove-orphans", check=False)
-        shutil.rmtree(workspace, ignore_errors=True)
-
-    request.addfinalizer(cleanup)
-    cleanup()
-
-    return {
-        "container_name": container_name,
-        "diagnostics": diagnostics,
-        "env": env,
-        "host_gid": host_gid,
-        "host_uid": host_uid,
-        "port": port,
-        "run": compose_run,
-        "token": "validate-token",
-        "workspace": workspace,
-    }

@@ -23,13 +23,28 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run unit tests
+        run: uv run pytest tests/unit
 
       - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: images/base/Dockerfile
           load: true
           push: false
           tags: dsml-kit:validate
@@ -37,11 +52,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=docker-image
           provenance: false
 
-      - name: Install test dependencies
-        run: python3 -m pip install -r requirements-dev.txt
-
-      - name: Run tests
-        run: DSML_TEST_IMAGE=dsml-kit:validate DSML_TEST_IMAGE_NAME=dsml-kit DSML_TEST_TAG=validate python3 -m pytest tests
+      - name: Run integration tests
+        run: DSML_TEST_IMAGE=dsml-kit:validate uv run pytest tests/integration
 
   publish:
     needs: validate
@@ -75,6 +87,7 @@ jobs:
           images: ${{ env.GHCR_IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=minimal,enable={{is_default_branch}}
             type=ref,event=tag
             type=sha,format=short
             type=raw,value={{date 'YYYY-MM-DD'}}
@@ -84,6 +97,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: images/base/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

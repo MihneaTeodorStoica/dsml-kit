@@ -1,6 +1,12 @@
 .env
+dsml.toml
+.venv/
 .pytest_cache/
 __pycache__/
 *.py[cod]
 .test-workspace/
 workspace/
+build/
+dist/
+*.egg-info/
+.coverage

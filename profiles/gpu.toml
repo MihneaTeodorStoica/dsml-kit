@@ -1,0 +1,4 @@
+name = "gpu"
+image = "ghcr.io/mihneateodorstoica/dsml-kit:gpu"
+description = "GPU-ready ML workspace."
+gpu = true

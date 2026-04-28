@@ -1,4 +1,4 @@
-name: Validate Docker Image
+name: Validate
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ permissions:
   id-token: write
 
 jobs:
-  validate:
+  python-package:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -20,14 +20,55 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run unit tests
+        run: uv run pytest tests/unit
+
+      - name: Check CLI help
+        run: uv run dsml --help
+
+      - name: Check config init
+        run: uv run dsml init --profile minimal --force
+
+  docker-image:
+    runs-on: ubuntu-latest
+    needs: python-package
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Sync dependencies
+        run: uv sync
+
       - name: Build image
-        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: images/base/Dockerfile
           load: true
           push: false
           tags: dsml-kit:validate
@@ -35,8 +76,5 @@ jobs:
           cache-to: type=gha,mode=max,scope=docker-image
           provenance: false
 
-      - name: Install test dependencies
-        run: python3 -m pip install -r requirements-dev.txt
-
-      - name: Run tests
-        run: DSML_TEST_IMAGE=dsml-kit:validate DSML_TEST_IMAGE_NAME=dsml-kit DSML_TEST_TAG=validate python3 -m pytest tests
+      - name: Run integration tests
+        run: DSML_TEST_IMAGE=dsml-kit:validate uv run pytest tests/integration
