@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -28,6 +29,7 @@ class DockerRunOptions:
     gpu: bool = False
     detach: bool = True
     restart_policy: str = "unless-stopped"
+    run_signature: str = ""
 
 
 def build_run_args(options: DockerRunOptions) -> list[str]:
@@ -61,6 +63,8 @@ def build_run_args(options: DockerRunOptions) -> list[str]:
             f"{options.home_volume}:/home/jovyan",
         ]
     )
+    if options.run_signature:
+        args.extend(["--label", f"{paths.RUN_SIGNATURE_LABEL}={options.run_signature}"])
 
     if options.gpu:
         args.extend(
@@ -132,6 +136,13 @@ def image_exists(image: str) -> bool:
     return result.returncode == 0
 
 
+def image_id(image: str) -> str:
+    result = run(["docker", "image", "inspect", "--format={{.Id}}", image], check=False, capture=True)
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
 def container_exists(container_name: str) -> bool:
     result = run(["docker", "container", "inspect", container_name], check=False, capture=True)
     return result.returncode == 0
@@ -150,6 +161,14 @@ def start_container(options: DockerRunOptions) -> subprocess.CompletedProcess[st
     return run(build_run_args(options), check=True, capture=options.detach)
 
 
+def start_existing_container(container_name: str, *, attach: bool = False) -> subprocess.CompletedProcess[str]:
+    args = ["docker", "start"]
+    if attach:
+        args.extend(["-a", "-i"])
+    args.append(container_name)
+    return run(args, check=True, capture=not attach)
+
+
 def stop_container(container_name: str) -> subprocess.CompletedProcess[str]:
     return run(["docker", "stop", container_name], check=False, capture=True)
 
@@ -160,6 +179,37 @@ def remove_container(container_name: str, *, force: bool = False) -> subprocess.
         args.append("-f")
     args.append(container_name)
     return run(args, check=False, capture=True)
+
+
+def container_label(container_name: str, label: str) -> str:
+    result = run(
+        [
+            "docker",
+            "inspect",
+            f"--format={{{{ with index .Config.Labels {json.dumps(label)} }}}}{{{{ . }}}}{{{{ end }}}}",
+            container_name,
+        ],
+        check=False,
+        capture=True,
+    )
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def container_env_value(container_name: str, key: str) -> str | None:
+    result = run(
+        ["docker", "inspect", "--format={{range .Config.Env}}{{println .}}{{end}}", container_name],
+        check=False,
+        capture=True,
+    )
+    if result.returncode != 0:
+        return None
+    prefix = f"{key}="
+    for line in result.stdout.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix) :]
+    return None
 
 
 def exec_in_container(

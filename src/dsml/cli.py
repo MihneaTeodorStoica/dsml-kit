@@ -51,7 +51,7 @@ def init(
 def up(
     attach: Annotated[bool, typer.Option(help="Attach to the container instead of starting detached.")] = False,
     build: Annotated[bool, typer.Option(help="Build the image before starting.")] = False,
-    pull: Annotated[bool, typer.Option(help="Pull the selected image before starting.")] = False,
+    pull: Annotated[bool, typer.Option(help="Pull the selected image before starting, even if it exists locally.")] = False,
     dev: Annotated[bool, typer.Option(help="Use a locally built development image.")] = False,
 ) -> None:
     """Start the Docker workspace."""
@@ -63,7 +63,7 @@ def up(
 
 @app.command()
 def down() -> None:
-    """Stop and remove the current project container."""
+    """Stop the current project container."""
     try:
         runtime.down()
     except Exception as exc:  # noqa: BLE001
@@ -164,7 +164,7 @@ def clean(
     image: Annotated[bool, typer.Option(help="Also remove the selected image.")] = False,
     volumes: Annotated[bool, typer.Option(help="Also remove the persistent home volume.")] = False,
 ) -> None:
-    """Remove stopped containers for this project."""
+    """Stop and remove containers for this project."""
     try:
         runtime.clean(image=image, volumes=volumes)
     except Exception as exc:  # noqa: BLE001
