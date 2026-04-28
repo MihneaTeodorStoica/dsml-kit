@@ -6,8 +6,8 @@ docstring-to-markdown==0.17
 duckdb==1.5.2
 et_xmlfile==2.0.0
 fonttools==4.62.1
-hpack==4.1.0
-ipython==9.10.1
+hpack==4.0.0
+ipython==9.13.0
 ipykernel==7.2.0
 ipython_pygments_lexers==1.1.1
 joblib==1.5.3
@@ -38,7 +38,7 @@ polars==1.40.1
 polars-runtime-32==1.40.1
 pyarrow==24.0.0
 pyparsing==3.3.2
-pyright==1.1.408
+pyright==1.1.409
 python-lsp-jsonrpc==1.1.2
 python-lsp-server==1.14.0
 pytokens==0.4.1
@@ -49,8 +49,8 @@ scipy==1.17.1
 seaborn==0.13.2
 statsmodels==0.14.6
 threadpoolctl==3.6.0
-tinycss2==1.2.1
+tinycss2==1.5.1
 tqdm==4.66.5
 traitlets==5.14.3
 ujson==5.12.0
-zstandard==0.23.0
+zstandard==0.25.0
