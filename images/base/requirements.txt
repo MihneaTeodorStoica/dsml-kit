@@ -49,7 +49,7 @@ scipy==1.17.1
 seaborn==0.13.2
 statsmodels==0.14.6
 threadpoolctl==3.6.0
-tinycss2==1.2.1
+tinycss2==1.5.1
 tqdm==4.66.5
 traitlets==5.14.3
 ujson==5.12.0
