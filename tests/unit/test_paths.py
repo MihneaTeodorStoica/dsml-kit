@@ -19,3 +19,11 @@ def test_resolve_mount_path_handles_relative_paths(tmp_path):
 
     assert paths.resolve_mount_path(project, ".") == project
     assert paths.resolve_mount_path(project, "workspace") == project / "workspace"
+
+
+def test_compose_path_lives_under_project_state_dir(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+
+    assert paths.state_dir(project) == project / ".dsml"
+    assert paths.compose_path(project) == project / ".dsml" / "compose.yaml"

@@ -1,6 +1,6 @@
 # dsml-kit
 
-Profile-based ML workspaces with Docker + uv.
+Profile-based ML workspaces with Docker Compose + uv.
 
 ```bash
 uv tool install dsml-kit
@@ -10,7 +10,7 @@ dsml init --profile minimal
 dsml up
 ```
 
-`dsml-kit` installs the `dsml` command. `dsml` manages a Dockerized JupyterLab workspace, mounts your project into the container, and uses uv for fast Python installs inside the runtime. Profiles give you curated environments while Docker keeps the notebook environment isolated and reproducible.
+`dsml-kit` installs the `dsml` command. `dsml` manages a Dockerized JupyterLab workspace, mounts your project into the container, and uses uv for fast Python installs inside the runtime. Profiles give you curated environments while Docker keeps the notebook environment isolated and reproducible. Internally, `dsml` generates a Docker Compose file from `dsml.toml` and manages the workspace with Docker Compose v2.
 
 ## Installation
 
@@ -27,7 +27,7 @@ uv sync
 uv run dsml --help
 ```
 
-Docker is required to run workspaces. GPU profiles require NVIDIA drivers plus NVIDIA Container Toolkit.
+Docker and Docker Compose v2 are required to run workspaces. Compose v2 means the `docker compose` command, not the legacy `docker-compose` binary. GPU profiles require NVIDIA drivers plus NVIDIA Container Toolkit.
 
 ## Quick Start
 
@@ -38,7 +38,7 @@ dsml init --profile minimal
 dsml up
 ```
 
-`dsml init` creates `dsml.toml`. `dsml up` starts a container, mounts `./workspace/` at `/home/jovyan/work`, creates a persistent Docker volume for `/home/jovyan`, and prints the JupyterLab URL. By default, `dsml up` follows `image_policy = "auto"`: remote images are pulled when missing, while the local `dsml-kit:dev` image is built from this repository.
+`dsml init` creates `dsml.toml`. `dsml up` generates `.dsml/compose.yaml`, starts the Compose service, mounts `./workspace/` at `/home/jovyan/work`, creates a persistent Docker volume for `/home/jovyan`, and prints the JupyterLab URL. By default, `dsml up` follows `image_policy = "auto"`: remote images are pulled when missing, while the local `dsml-kit:dev` image is built from this repository.
 
 ## Profiles
 
@@ -78,6 +78,14 @@ dsml up --dev --build
 
 The `--pull` and `--build` flags override the image policy in `dsml.toml` for a single run.
 
+For debugging, inspect the generated Compose file:
+
+```bash
+cat .dsml/compose.yaml
+```
+
+Normally you should not edit this file by hand. It is regenerated from `dsml.toml` whenever `dsml` needs it.
+
 ## Configuration
 
 `dsml.toml` is the workspace config file created by `dsml init`. It is safe to edit by hand.
@@ -106,7 +114,7 @@ extra_args = []
 extra = []
 ```
 
-`[workspace]` controls the Docker workspace:
+`[workspace]` controls the generated Docker Compose workspace:
 
 - `profile`: bundled profile name, currently `minimal`, `gpu`, `full`, or `dev`
 - `mount`: host path mounted into the container, relative to `dsml.toml`
@@ -138,6 +146,7 @@ Add packages to `[packages].extra` in `dsml.toml`:
 
 ```bash
 dsml add polars optuna
+dsml add -r requirements.txt
 ```
 
 If the container is running, `dsml add` also runs:
@@ -145,6 +154,8 @@ If the container is running, `dsml add` also runs:
 ```bash
 uv pip install --system polars optuna
 ```
+
+Requirement files are read into `[packages].extra`; package specifier lines and nested `-r other.txt` includes are supported.
 
 Install everything listed in `dsml.toml` into a running container:
 
@@ -163,7 +174,7 @@ dsml init --profile gpu --gpu true
 dsml up
 ```
 
-The CLI adds Docker GPU flags when GPU mode resolves to true. Run diagnostics if GPU startup fails:
+The generated Compose service uses NVIDIA device reservations when GPU mode resolves to true. Run diagnostics if GPU startup fails:
 
 ```bash
 dsml doctor
@@ -189,7 +200,7 @@ DSML_TEST_IMAGE=dsml-kit:validate uv run pytest tests/integration
 
 The runtime image is built from `images/base/Dockerfile` and installs pinned notebook/data packages from `images/base/requirements.txt` using uv.
 
-The image keeps the useful runtime contract from the original project:
+The generated Compose service keeps the useful runtime contract from the original project:
 
 - Jupyter minimal-notebook base image
 - JupyterLab startup through `start-notebook.py`
@@ -207,7 +218,7 @@ Run:
 dsml doctor
 ```
 
-It checks Docker, the daemon, `dsml.toml`, the selected profile, the configured port, the selected image, and GPU prerequisites when requested.
+It checks Docker, Docker Compose v2, the daemon, `dsml.toml`, the selected profile, the configured port, the selected image, and GPU prerequisites when requested.
 
 Cleanup commands:
 
@@ -218,6 +229,6 @@ dsml clean --volumes
 dsml nuke
 ```
 
-`dsml down` stops the current project container and keeps it around for the next `dsml up`. `dsml clean` stops and removes project containers. `dsml up` reuses an existing matching container and recreates it when the workspace settings or selected image change.
+`dsml down` stops the current Compose service and keeps the container around for the next `dsml up`. `dsml clean` runs `docker compose down` for the generated project and can also remove the selected image or persistent volume. `dsml up` regenerates `.dsml/compose.yaml` and lets Compose reconcile the container when workspace settings or the selected image change.
 
-`dsml nuke` requires typing `DELETE` before it removes the project container and persistent home volume.
+`dsml nuke` requires typing `DELETE` before it removes the Compose project and persistent home volume.

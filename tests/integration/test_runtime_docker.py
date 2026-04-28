@@ -1,8 +1,11 @@
+import json
 import os
 import uuid
 
+import pytest
+
 from conftest import assert_run, free_port, run, wait_for_container_health, wait_for_http
-from dsml import docker
+from dsml import compose, docker
 
 
 UID_GID_AND_WORKSPACE_CHECK = """
@@ -41,15 +44,21 @@ import statsmodels
 """
 
 
-def test_docker_runtime_serves_jupyter_and_writes_workspace_as_host_user(request, tmp_path, image):
+def test_compose_runtime_serves_jupyter_and_writes_workspace_as_host_user(request, tmp_path, image):
+    if not docker.compose_cli_exists():
+        pytest.skip("Docker Compose v2 is required for runtime integration tests.")
+
     container_name = f"dsml-kit-runtime-{uuid.uuid4().hex[:8]}"
     home_volume = f"dsml-home-test-{uuid.uuid4().hex[:8]}"
     port = free_port()
     token = "validate-token"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
+    compose_file = compose.compose_path(tmp_path)
 
     def cleanup():
+        if compose_file.exists():
+            run(compose.compose_down_args(tmp_path, compose_file, volumes=True), check=False)
         run(["docker", "rm", "-f", container_name], check=False)
         run(["docker", "volume", "rm", home_volume], check=False)
 
@@ -68,22 +77,27 @@ def test_docker_runtime_serves_jupyter_and_writes_workspace_as_host_user(request
         host_gid=os.getgid(),
         restart_policy="no",
     )
-    assert_run(docker.build_run_args(options))
+    compose.write_compose_file(tmp_path, options)
+    assert_run(compose.compose_up_args(tmp_path, compose_file, detach=True))
 
     wait_for_container_health(container_name)
     wait_for_http(f"http://127.0.0.1:{port}/api/status?token={token}")
 
+    inspect = json.loads(assert_run(["docker", "inspect", container_name]).stdout)[0]
+    assert any(
+        mount["Type"] == "volume"
+        and mount["Name"] == home_volume
+        and mount["Destination"] == "/home/jovyan"
+        for mount in inspect["Mounts"]
+    )
+
     uid_result = assert_run(
-        [
-            "docker",
-            "exec",
-            "--user",
-            "jovyan",
-            container_name,
-            "python",
-            "-c",
-            UID_GID_AND_WORKSPACE_CHECK,
-        ]
+        compose.compose_exec_args(
+            tmp_path,
+            compose_file,
+            ["python", "-c", UID_GID_AND_WORKSPACE_CHECK],
+            user="jovyan",
+        )
     )
     assert uid_result.returncode == 0
     workspace_file = workspace / "uid-test.txt"
@@ -91,15 +105,11 @@ def test_docker_runtime_serves_jupyter_and_writes_workspace_as_host_user(request
     assert workspace_file.stat().st_uid == os.getuid()
 
     import_result = assert_run(
-        [
-            "docker",
-            "exec",
-            "--user",
-            "jovyan",
-            container_name,
-            "python",
-            "-c",
-            IMPORT_CONTRACT,
-        ]
+        compose.compose_exec_args(
+            tmp_path,
+            compose_file,
+            ["python", "-c", IMPORT_CONTRACT],
+            user="jovyan",
+        )
     )
     assert import_result.returncode == 0

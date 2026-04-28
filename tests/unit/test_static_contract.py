@@ -24,6 +24,7 @@ def test_dockerignore_excludes_local_runtime_state():
     assert ".git" in ignored
     assert ".github" in ignored
     assert ".env" in ignored
+    assert ".dsml/" in ignored
     assert "workspace/" in ignored
     assert "*.ipynb" in ignored
     assert "__pycache__/" in ignored
@@ -33,6 +34,7 @@ def test_gitignore_excludes_generated_test_and_runtime_state():
     ignored = set(read_repo_file(".gitignore"))
 
     assert ".env" in ignored
+    assert ".dsml/" in ignored
     assert ".pytest_cache/" in ignored
     assert "__pycache__/" in ignored
     assert "*.py[cod]" in ignored

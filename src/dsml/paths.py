@@ -8,6 +8,8 @@ from pathlib import Path
 
 
 CONFIG_FILE = "dsml.toml"
+STATE_DIR = ".dsml"
+COMPOSE_FILE = "compose.yaml"
 PROJECT_LABEL = "dsml.project"
 CONFIG_LABEL = "dsml.config"
 RUN_SIGNATURE_LABEL = "dsml.run-signature"
@@ -38,6 +40,14 @@ def locate_config(start: Path | None = None) -> Path | None:
 
 def config_path(project_root: Path | None = None) -> Path:
     return (project_root or find_project_root()) / CONFIG_FILE
+
+
+def state_dir(project_root: Path) -> Path:
+    return project_root / STATE_DIR
+
+
+def compose_path(project_root: Path) -> Path:
+    return state_dir(project_root) / COMPOSE_FILE
 
 
 def resolve_mount_path(project_root: Path, mount: str | os.PathLike[str]) -> Path:

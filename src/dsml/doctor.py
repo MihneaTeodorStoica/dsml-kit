@@ -17,6 +17,13 @@ def run_checks(start: Path | None = None) -> list[Check]:
     checks: list[Check] = []
     checks.append(_check("Docker CLI", docker.docker_cli_exists(), "Install Docker if this fails."))
     checks.append(_check("Docker daemon", docker.daemon_reachable(), "Start Docker Desktop or the Docker daemon."))
+    checks.append(
+        _check(
+            "Docker Compose v2",
+            docker.compose_cli_exists(),
+            "Install Docker Compose v2 so `docker compose version` works.",
+        )
+    )
 
     config_path = paths.locate_config(start)
     if config_path is None:

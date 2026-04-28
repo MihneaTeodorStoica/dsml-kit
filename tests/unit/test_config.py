@@ -45,6 +45,47 @@ def test_add_packages_preserves_order_and_deduplicates(tmp_path):
     assert config.read_config(path)["packages"]["extra"] == ["polars", "optuna"]
 
 
+def test_read_requirement_specs_ignores_comments_and_deduplicates(tmp_path):
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text(
+        "\n".join(
+            [
+                "# local project requirements",
+                "polars>=1.0  # dataframe engine",
+                "optuna",
+                "pkg @ https://example.test/pkg.tar.gz#sha256=abc",
+                "polars>=1.0",
+                "",
+            ]
+        )
+    )
+
+    assert config.read_requirement_specs([requirements]) == [
+        "polars>=1.0",
+        "optuna",
+        "pkg @ https://example.test/pkg.tar.gz#sha256=abc",
+    ]
+
+
+def test_read_requirement_specs_supports_nested_requirement_files(tmp_path):
+    base = tmp_path / "requirements.txt"
+    nested_dir = tmp_path / "nested"
+    nested_dir.mkdir()
+    nested = nested_dir / "extra.txt"
+    base.write_text("-r nested/extra.txt\npolars\n")
+    nested.write_text("optuna\n")
+
+    assert config.read_requirement_specs([base]) == ["optuna", "polars"]
+
+
+def test_read_requirement_specs_rejects_pip_options(tmp_path):
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("--extra-index-url https://example.test/simple\n")
+
+    with pytest.raises(config.ConfigError, match="Unsupported requirements option"):
+        config.read_requirement_specs([requirements])
+
+
 def test_invalid_gpu_value_fails_validation():
     data = config.default_config(gpu="sometimes")
 

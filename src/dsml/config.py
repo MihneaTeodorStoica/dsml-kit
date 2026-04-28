@@ -199,6 +199,14 @@ def add_packages(path: Path, packages: list[str]) -> dict[str, Any]:
     return data
 
 
+def read_requirement_specs(paths: list[Path]) -> list[str]:
+    specs: list[str] = []
+    seen_files: set[Path] = set()
+    for path in paths:
+        specs.extend(_read_requirement_specs(path, seen_files=seen_files))
+    return _dedupe(specs)
+
+
 def resolve_token(data: dict[str, Any]) -> str:
     return tokens.normalize_token(data["workspace"].get("jupyter_token"))
 
@@ -242,3 +250,48 @@ def _valid_image_policy(value: object) -> str:
 
 def _entry(key: str, value: object) -> str:
     return tomli_w.dumps({key: value}).strip()
+
+
+def _read_requirement_specs(path: Path, *, seen_files: set[Path]) -> list[str]:
+    resolved = path.expanduser().resolve()
+    if resolved in seen_files:
+        return []
+    seen_files.add(resolved)
+    if not resolved.is_file():
+        raise ConfigError(f"Requirements file not found: {path}")
+
+    specs: list[str] = []
+    for line_number, raw_line in enumerate(resolved.read_text().splitlines(), start=1):
+        line = _strip_requirement_comment(raw_line).strip()
+        if not line:
+            continue
+        if line.startswith("-r ") or line.startswith("--requirement "):
+            nested = line.split(maxsplit=1)[1]
+            specs.extend(_read_requirement_specs(resolved.parent / nested, seen_files=seen_files))
+            continue
+        if line.startswith("-"):
+            raise ConfigError(
+                f"Unsupported requirements option in {resolved}:{line_number}: {line}. "
+                "Only package specifiers and nested -r files can be added to dsml.toml."
+            )
+        specs.append(line)
+    return specs
+
+
+def _strip_requirement_comment(line: str) -> str:
+    stripped = line.lstrip()
+    if stripped.startswith("#"):
+        return ""
+    for marker in (" #", "\t#"):
+        index = line.find(marker)
+        if index != -1:
+            return line[:index]
+    return line
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    for value in values:
+        if value not in deduped:
+            deduped.append(value)
+    return deduped
