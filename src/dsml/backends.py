@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-import subprocess
-from typing import Protocol
+from typing import Any, Protocol
 
 from dsml import compose, docker
 from dsml.options import RuntimeOptions
-
 
 SUPPORTED_BACKENDS = {"compose"}
 
@@ -26,7 +25,8 @@ class WorkspaceContext:
 
 
 class RuntimeBackend(Protocol):
-    name: str
+    @property
+    def name(self) -> str: ...
 
     def ensure_available(self) -> None: ...
 
@@ -42,9 +42,13 @@ class RuntimeBackend(Protocol):
 
     def stop(self, context: WorkspaceContext) -> subprocess.CompletedProcess[str]: ...
 
-    def restart(self, context: WorkspaceContext) -> subprocess.CompletedProcess[str]: ...
+    def restart(
+        self, context: WorkspaceContext
+    ) -> subprocess.CompletedProcess[str]: ...
 
-    def down(self, context: WorkspaceContext, *, volumes: bool = False) -> subprocess.CompletedProcess[str]: ...
+    def down(
+        self, context: WorkspaceContext, *, volumes: bool = False
+    ) -> subprocess.CompletedProcess[str]: ...
 
     def logs(
         self,
@@ -90,7 +94,9 @@ class ComposeBackend:
     def ensure_available(self) -> None:
         if docker.compose_cli_exists():
             return
-        raise BackendError("Docker Compose v2 is required. Install Docker with the `docker compose` plugin.")
+        raise BackendError(
+            "Docker Compose v2 is required. Install Docker with the `docker compose` plugin."
+        )
 
     def write_config(self, context: WorkspaceContext) -> Path:
         return compose.write_compose_file(context.project_root, context.options)
@@ -113,7 +119,9 @@ class ComposeBackend:
     def restart(self, context: WorkspaceContext) -> subprocess.CompletedProcess[str]:
         return compose.restart(context.project_root, context.compose_file)
 
-    def down(self, context: WorkspaceContext, *, volumes: bool = False) -> subprocess.CompletedProcess[str]:
+    def down(
+        self, context: WorkspaceContext, *, volumes: bool = False
+    ) -> subprocess.CompletedProcess[str]:
         return compose.down(context.project_root, context.compose_file, volumes=volumes)
 
     def logs(
@@ -142,14 +150,16 @@ class ComposeBackend:
         capture: bool = False,
         check: bool | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        kwargs = {"user": user}
+        kwargs: dict[str, Any] = {"user": user}
         if interactive:
             kwargs["interactive"] = True
         if capture:
             kwargs["capture"] = True
         if check is not None:
             kwargs["check"] = check
-        return compose.exec(context.project_root, context.compose_file, command, **kwargs)
+        return compose.exec(
+            context.project_root, context.compose_file, command, **kwargs
+        )
 
     def service_running(self, context: WorkspaceContext) -> bool:
         return compose.service_running(context.project_root, context.compose_file)
@@ -168,7 +178,13 @@ class ComposeBackend:
         prune: bool = True,
         quiet: bool = False,
     ) -> subprocess.CompletedProcess[str]:
-        return compose.watch(context.project_root, context.compose_file, no_up=no_up, prune=prune, quiet=quiet)
+        return compose.watch(
+            context.project_root,
+            context.compose_file,
+            no_up=no_up,
+            prune=prune,
+            quiet=quiet,
+        )
 
 
 def backend_name(data: dict) -> str:

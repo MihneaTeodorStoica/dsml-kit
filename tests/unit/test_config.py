@@ -102,6 +102,15 @@ def test_invalid_image_policy_fails_validation():
         config.validate_config(data)
 
 
+@pytest.mark.parametrize("port", [True, 8888.5, "not-a-port"])
+def test_invalid_port_fails_validation(port):
+    data = config.default_config()
+    data["workspace"]["port"] = port
+
+    with pytest.raises(config.ConfigError, match="port"):
+        config.validate_config(data)
+
+
 def test_invalid_runtime_backend_fails_validation():
     data = config.default_config()
     data["runtime"]["backend"] = "docker"

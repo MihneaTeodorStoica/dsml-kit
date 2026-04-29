@@ -609,7 +609,7 @@ def port_is_free(bind_address: str, port: int) -> bool:
 
 
 def dev_test() -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["uv", "run", "pytest"], check=True)
+    return subprocess.run(["uv", "run", "pytest"], check=True, text=True)
 
 
 def dev_validate() -> None:

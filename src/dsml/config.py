@@ -230,10 +230,17 @@ def _required_string(data: dict[str, Any], key: str) -> str:
 
 
 def _valid_port(value: object) -> int:
-    try:
-        port = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ConfigError("[workspace].port must be an integer.") from exc
+    if isinstance(value, bool):
+        raise ConfigError("[workspace].port must be an integer.")
+    if isinstance(value, int):
+        port = value
+    elif isinstance(value, str):
+        try:
+            port = int(value.strip())
+        except ValueError as exc:
+            raise ConfigError("[workspace].port must be an integer.") from exc
+    else:
+        raise ConfigError("[workspace].port must be an integer.")
     if port < 1 or port > 65535:
         raise ConfigError("[workspace].port must be between 1 and 65535.")
     return port

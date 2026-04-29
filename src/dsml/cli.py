@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 from rich.console import Console
@@ -21,9 +21,17 @@ app.add_typer(dev_app, name="dev")
 console = Console()
 
 
-def _handle_error(exc: Exception) -> None:
+def _handle_error(exc: Exception) -> NoReturn:
     console.print(f"[red]Error:[/red] {exc}")
     raise typer.Exit(1) from exc
+
+
+def _configured_workspace_image() -> str:
+    _, _, data = runtime.load_workspace()
+    image = data["workspace"]["image"]
+    if not isinstance(image, str):
+        raise runtime.RuntimeError("Configured workspace image must be a string.")
+    return image
 
 
 @app.callback(invoke_without_command=True)
@@ -331,10 +339,8 @@ def image_pull(
 ) -> None:
     """Pull the configured or specified runtime image."""
     try:
-        if image is None:
-            _, _, data = runtime.load_workspace()
-            image = data["workspace"]["image"]
-        images.pull_image(image)
+        selected_image = image if image is not None else _configured_workspace_image()
+        images.pull_image(selected_image)
     except Exception as exc:  # noqa: BLE001
         _handle_error(exc)
 
@@ -345,10 +351,8 @@ def image_freeze(
 ) -> None:
     """Print pip freeze from a runtime image."""
     try:
-        if image is None:
-            _, _, data = runtime.load_workspace()
-            image = data["workspace"]["image"]
-        images.freeze_packages(image)
+        selected_image = image if image is not None else _configured_workspace_image()
+        images.freeze_packages(selected_image)
     except Exception as exc:  # noqa: BLE001
         _handle_error(exc)
 
@@ -359,10 +363,8 @@ def image_remove(
 ) -> None:
     """Remove a local runtime image."""
     try:
-        if image is None:
-            _, _, data = runtime.load_workspace()
-            image = data["workspace"]["image"]
-        images.remove_image(image)
+        selected_image = image if image is not None else _configured_workspace_image()
+        images.remove_image(selected_image)
     except Exception as exc:  # noqa: BLE001
         _handle_error(exc)
 
