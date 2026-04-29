@@ -132,6 +132,26 @@ python -m pip install -r requirements.txt
 dsml --help
 ```
 
+### Development in VS Code Dev Containers
+
+This repository includes a VS Code Dev Container for maintaining `dsml-kit`.
+It provides Python 3.11, `uv`, the Docker CLI, and the Docker Compose plugin.
+Docker Desktop or Docker Engine must be running on the host because the
+container uses the host Docker socket.
+
+1. Install the VS Code Dev Containers extension.
+2. Open this repository in VS Code.
+3. Run `Dev Containers: Reopen in Container`.
+4. Wait for the post-create step to finish; it runs `uv sync`.
+
+Then check the development workflow:
+
+```bash
+uv run dsml --help
+uv run pytest tests/unit
+docker compose version
+```
+
 ## Quick Start
 
 Create a project and initialize a workspace:

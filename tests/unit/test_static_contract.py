@@ -1,11 +1,16 @@
+import json
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def read_repo_text(path):
+    return (REPO_ROOT / path).read_text()
+
+
 def read_repo_file(path):
-    return (REPO_ROOT / path).read_text().splitlines()
+    return read_repo_text(path).splitlines()
 
 
 def test_dockerfile_uses_pinned_base_image_uv_and_healthcheck():
@@ -48,3 +53,33 @@ def test_obsolete_product_interfaces_are_removed():
     assert not (REPO_ROOT / "compose.dev.yaml").exists()
     assert not (REPO_ROOT / "compose.gpu.yaml").exists()
     assert not (REPO_ROOT / ".env.example").exists()
+
+
+def test_devcontainer_supports_repo_development_without_docker_engine():
+    config_path = REPO_ROOT / ".devcontainer/devcontainer.json"
+    dockerfile = read_repo_file(".devcontainer/Dockerfile")
+    config = json.loads(read_repo_text(".devcontainer/devcontainer.json"))
+
+    assert config_path.exists()
+    assert config["workspaceFolder"] == "/workspaces/dsml-kit"
+    assert config["remoteUser"] == "vscode"
+    assert config["postCreateCommand"] == "uv sync"
+    assert 8888 in config["forwardPorts"]
+    assert "unix:///var/run/docker.sock" == config["containerEnv"]["DOCKER_HOST"]
+    assert any("/var/run/docker.sock" in mount for mount in config["mounts"])
+
+    extensions = set(config["customizations"]["vscode"]["extensions"])
+    assert {
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "ms-azuretools.vscode-docker",
+        "tamasfe.even-better-toml",
+        "redhat.vscode-yaml",
+    } <= extensions
+
+    assert dockerfile[0] == "FROM mcr.microsoft.com/devcontainers/python:1-3.11-bookworm"
+    assert any("COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/" in line for line in dockerfile)
+    assert any("docker-ce-cli" in line for line in dockerfile)
+    assert any("docker-compose-plugin" in line for line in dockerfile)
+    assert not any("docker-ce " in line for line in dockerfile)

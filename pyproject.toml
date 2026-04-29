@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dsml-kit"
-version = "0.1.4"
+version = "0.1.5"
 description = "Profile-based ML workspace with Docker Compose + uv, managed via a simple CLI."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -47,7 +47,6 @@ dsml = ["templates/*.toml"]
 
 [tool.uv.workspace]
 members = [
-    ".",
     ".",
 ]
 
