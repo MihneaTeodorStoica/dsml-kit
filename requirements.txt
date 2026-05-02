@@ -1,4 +1,0 @@
-# Development environment for contributors using pip/venv.
-# Prefer `uv sync` when using uv; runtime image packages live in images/base/requirements.txt.
--e .
-pytest>=7.4.4

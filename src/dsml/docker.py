@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import json
 import shutil
 import subprocess
+
+import docker as docker_sdk
+from docker.errors import DockerException, ImageNotFound, NotFound
 
 
 def run(args: list[str], *, check: bool = True, capture: bool = False) -> subprocess.CompletedProcess[str]:
@@ -18,11 +20,20 @@ def docker_cli_exists() -> bool:
     return shutil.which("docker") is not None
 
 
+def sdk_client() -> docker_sdk.DockerClient:
+    return docker_sdk.from_env()
+
+
+def _completed(args: list[str], returncode: int = 0, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args, returncode, stdout, stderr)
+
+
 def daemon_reachable() -> bool:
-    if not docker_cli_exists():
+    try:
+        sdk_client().ping()
+    except DockerException:
         return False
-    result = run(["docker", "info"], check=False, capture=True)
-    return result.returncode == 0
+    return True
 
 
 def compose_cli_exists() -> bool:
@@ -37,68 +48,89 @@ def nvidia_smi_exists() -> bool:
 
 
 def image_exists(image: str) -> bool:
-    result = run(["docker", "image", "inspect", image], check=False, capture=True)
-    return result.returncode == 0
+    try:
+        sdk_client().images.get(image)
+    except ImageNotFound:
+        return False
+    except DockerException:
+        return False
+    return True
 
 
 def image_id(image: str) -> str:
-    result = run(["docker", "image", "inspect", "--format={{.Id}}", image], check=False, capture=True)
-    if result.returncode != 0:
+    try:
+        return str(sdk_client().images.get(image).id or "")
+    except (ImageNotFound, DockerException):
         return ""
-    return result.stdout.strip()
 
 
 def container_exists(container_name: str) -> bool:
-    result = run(["docker", "container", "inspect", container_name], check=False, capture=True)
-    return result.returncode == 0
+    try:
+        sdk_client().containers.get(container_name)
+    except NotFound:
+        return False
+    except DockerException:
+        return False
+    return True
 
 
 def remove_container(container_name: str, *, force: bool = False) -> subprocess.CompletedProcess[str]:
-    args = ["docker", "rm"]
-    if force:
-        args.append("-f")
-    args.append(container_name)
-    return run(args, check=False, capture=True)
+    args = ["docker", "rm", *([] if not force else ["-f"]), container_name]
+    try:
+        sdk_client().containers.get(container_name).remove(force=force)
+    except NotFound:
+        return _completed(args, 1, stderr=f"No such container: {container_name}")
+    except DockerException as exc:
+        return _completed(args, 1, stderr=str(exc))
+    return _completed(args)
 
 
 def container_label(container_name: str, label: str) -> str:
-    result = run(
-        [
-            "docker",
-            "inspect",
-            f"--format={{{{ with index .Config.Labels {json.dumps(label)} }}}}{{{{ . }}}}{{{{ end }}}}",
-            container_name,
-        ],
-        check=False,
-        capture=True,
-    )
-    if result.returncode != 0:
+    try:
+        labels = sdk_client().containers.get(container_name).attrs.get("Config", {}).get("Labels") or {}
+    except (NotFound, DockerException):
         return ""
-    return result.stdout.strip()
+    return str(labels.get(label, ""))
 
 
 def container_env_value(container_name: str, key: str) -> str | None:
-    result = run(
-        ["docker", "inspect", "--format={{range .Config.Env}}{{println .}}{{end}}", container_name],
-        check=False,
-        capture=True,
-    )
-    if result.returncode != 0:
+    try:
+        env = sdk_client().containers.get(container_name).attrs.get("Config", {}).get("Env") or []
+    except (NotFound, DockerException):
         return None
     prefix = f"{key}="
-    for line in result.stdout.splitlines():
+    for line in env:
         if line.startswith(prefix):
             return line[len(prefix) :]
     return None
 
 
 def pull_image(image: str) -> subprocess.CompletedProcess[str]:
-    return run(["docker", "pull", image])
+    args = ["docker", "pull", image]
+    try:
+        sdk_client().images.pull(image)
+    except DockerException as exc:
+        return _completed(args, 1, stderr=str(exc))
+    return _completed(args)
 
 
 def remove_image(image: str) -> subprocess.CompletedProcess[str]:
-    return run(["docker", "image", "rm", image], check=False, capture=True)
+    args = ["docker", "image", "rm", image]
+    try:
+        sdk_client().images.remove(image)
+    except ImageNotFound:
+        return _completed(args, 1, stderr=f"No such image: {image}")
+    except DockerException as exc:
+        return _completed(args, 1, stderr=str(exc))
+    return _completed(args)
 
 
 def remove_volume(volume_name: str) -> subprocess.CompletedProcess[str]:
-    return run(["docker", "volume", "rm", volume_name], check=False, capture=True)
+    args = ["docker", "volume", "rm", volume_name]
+    try:
+        sdk_client().volumes.get(volume_name).remove()
+    except NotFound:
+        return _completed(args, 1, stderr=f"No such volume: {volume_name}")
+    except DockerException as exc:
+        return _completed(args, 1, stderr=str(exc))
+    return _completed(args)
