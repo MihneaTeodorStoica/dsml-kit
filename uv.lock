@@ -146,7 +146,7 @@ wheels = [
 
 [[package]]
 name = "dsml-kit"
-version = "2.0.8"
+version = "2.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "docker" },
