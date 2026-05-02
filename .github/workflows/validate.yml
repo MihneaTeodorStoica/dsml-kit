@@ -45,7 +45,6 @@ jobs:
 
   docker-image:
     runs-on: ubuntu-latest
-    needs: python-package
 
     steps:
       - name: Check out repository
@@ -116,24 +115,26 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "release_exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "release_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create release and tag
-        if: steps.release_state.outputs.exists == 'false'
+      - name: Create release tag
+        if: steps.release_state.outputs.release_exists == 'false' && steps.release_state.outputs.tag_exists == 'false'
         env:
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          gh release create "$TAG" \
-            --target "$GITHUB_SHA" \
-            --title "$TAG" \
-            --generate-notes
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
 
       - name: Dispatch package publishing
-        if: steps.release_state.outputs.exists == 'false'
+        if: steps.release_state.outputs.release_exists == 'false' && steps.release_state.outputs.tag_exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}

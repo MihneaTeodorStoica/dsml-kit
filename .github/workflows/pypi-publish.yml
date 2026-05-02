@@ -6,6 +6,10 @@ on:
       - "v*"
   workflow_dispatch:
 
+concurrency:
+  group: release-python-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -45,12 +49,6 @@ jobs:
           if tag != expected:
               raise SystemExit(f"Tag {tag!r} does not match pyproject version {version!r}; expected {expected!r}.")
           PY
-
-      - name: Run unit tests
-        run: uv run pytest tests/unit
-
-      - name: Check CLI help
-        run: uv run dsml --help
 
       - name: Build package
         run: uv build

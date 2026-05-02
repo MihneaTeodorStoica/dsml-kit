@@ -80,7 +80,10 @@ def project_name(project_root: Path) -> str:
 
 
 def default_container_name(project_root: Path) -> str:
-    return f"dsml-{project_name(project_root)}"
+    name = project_name(project_root)
+    if name.startswith("dsml-"):
+        return name
+    return f"dsml-{name}"
 
 
 def default_home_volume(project_root: Path) -> str:

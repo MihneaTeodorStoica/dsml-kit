@@ -13,6 +13,16 @@ def test_default_names_are_stable_and_prefixed(tmp_path):
     assert container == paths.default_container_name(project)
 
 
+def test_default_container_name_does_not_duplicate_dsml_prefix(tmp_path):
+    project = tmp_path / "dsml-kit"
+    project.mkdir()
+
+    container = paths.default_container_name(project)
+
+    assert container.startswith("dsml-kit-")
+    assert not container.startswith("dsml-dsml-kit-")
+
+
 def test_resolve_mount_path_handles_relative_paths(tmp_path):
     project = tmp_path / "project"
     project.mkdir()

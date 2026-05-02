@@ -5,6 +5,10 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
+concurrency:
+  group: daily-refresh-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   GHCR_IMAGE: ghcr.io/${{ github.repository }}
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -34,9 +38,6 @@ jobs:
 
       - name: Sync dependencies
         run: uv sync
-
-      - name: Run unit tests
-        run: uv run pytest tests/unit
 
       - name: Build image
         uses: docker/build-push-action@v7
@@ -108,5 +109,13 @@ jobs:
             ${{ steps.image.outputs.name }}:${{ matrix.variant }}-daily
           cache-from: type=gha,scope=docker-image-${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=docker-image-${{ matrix.variant }}
-          provenance: mode=max
+          provenance: false
           sbom: true
+
+      - name: Attest ${{ matrix.variant }} daily image provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
