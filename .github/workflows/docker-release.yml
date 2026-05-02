@@ -2,8 +2,6 @@ name: Publish Release Container Image
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*"
   workflow_dispatch:
