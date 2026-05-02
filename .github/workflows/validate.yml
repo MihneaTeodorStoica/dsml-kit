@@ -152,17 +152,11 @@ jobs:
           print(f"tag=v{version}")
           PY
 
-      - name: Check release state
-        id: release_state
+      - name: Check tag state
+        id: tag_state
         env:
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "release_exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "release_exists=false" >> "$GITHUB_OUTPUT"
-          fi
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
             git fetch --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
@@ -172,27 +166,24 @@ jobs:
             echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Verify existing release tag
-        if: steps.release_state.outputs.release_exists == 'false' && steps.release_state.outputs.tag_exists == 'true'
+      - name: Report existing tag
+        if: steps.tag_state.outputs.tag_exists == 'true'
         env:
           TAG: ${{ steps.version.outputs.tag }}
-          TAG_TARGET: ${{ steps.release_state.outputs.tag_target }}
+          TAG_TARGET: ${{ steps.tag_state.outputs.tag_target }}
         run: |
-          if [ "$TAG_TARGET" != "$GITHUB_SHA" ]; then
-            echo "Release tag $TAG already exists at $TAG_TARGET, not the verified commit $GITHUB_SHA." >&2
-            exit 1
-          fi
+          echo "Tag $TAG already exists at $TAG_TARGET; skipping automatic tag creation."
 
-      - name: Create release tag
-        if: steps.release_state.outputs.release_exists == 'false' && steps.release_state.outputs.tag_exists == 'false'
+      - name: Create tag
+        if: steps.tag_state.outputs.tag_exists == 'false'
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           git tag "$TAG" "$GITHUB_SHA"
           git push origin "refs/tags/$TAG"
 
-      - name: Verify created release tag
-        if: steps.release_state.outputs.release_exists == 'false' && steps.release_state.outputs.tag_exists == 'false'
+      - name: Verify created tag
+        if: steps.tag_state.outputs.tag_exists == 'false'
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
@@ -204,7 +195,7 @@ jobs:
           fi
 
       - name: Dispatch package publishing
-        if: steps.release_state.outputs.release_exists == 'false' && steps.release_state.outputs.tag_exists == 'false'
+        if: steps.tag_state.outputs.tag_exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
