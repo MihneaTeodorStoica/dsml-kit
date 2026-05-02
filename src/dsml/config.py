@@ -204,7 +204,7 @@ def validate_config(data: dict[str, Any]) -> dict[str, Any]:
 
     workspace["profile"] = _required_string(workspace, "profile")
     workspace["mount"] = _required_string(workspace, "mount")
-    workspace["bind_address"] = _required_string(workspace, "bind_address")
+    workspace["bind_address"] = _valid_bind_address(workspace.get("bind_address"))
     workspace["container_name"] = _required_string(workspace, "container_name")
     workspace["home_volume"] = _required_string(workspace, "home_volume")
     workspace["image"] = _required_string(workspace, "image")
@@ -306,6 +306,13 @@ def _valid_port(value: object) -> int:
     if port < 1 or port > 65535:
         raise ConfigError("[workspace].port must be between 1 and 65535.")
     return port
+
+
+def _valid_bind_address(value: object) -> str:
+    text = _required_string({"bind_address": value}, "bind_address")
+    if text in {"0.0.0.0", "::", "[::]"}:
+        raise ConfigError("[workspace].bind_address must target a specific host interface, not all interfaces.")
+    return text
 
 
 def _valid_gpu(value: object) -> bool | str:

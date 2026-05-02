@@ -1,4 +1,5 @@
 import subprocess
+import socket
 
 import pytest
 import yaml
@@ -657,3 +658,21 @@ def test_compose_debug_runtime_commands_call_backend_wrappers(tmp_path, monkeypa
         ("config", paths.compose_path(tmp_path)),
         ("ps", paths.compose_path(tmp_path)),
     ]
+
+
+def test_port_is_free_reports_listening_loopback_port_as_busy():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        sock.listen()
+        port = sock.getsockname()[1]
+
+        assert runtime.port_is_free("127.0.0.1", port) is False
+
+
+def test_port_is_free_probes_wildcard_address_through_loopback():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        sock.listen()
+        port = sock.getsockname()[1]
+
+        assert runtime.port_is_free("0.0.0.0", port) is False

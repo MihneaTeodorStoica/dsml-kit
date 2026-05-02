@@ -140,6 +140,15 @@ def test_invalid_port_fails_validation(port):
         config.validate_config(data)
 
 
+@pytest.mark.parametrize("bind_address", ["0.0.0.0", "::", "[::]"])
+def test_wildcard_bind_address_fails_validation(bind_address):
+    data = config.default_config()
+    data["workspace"]["bind_address"] = bind_address
+
+    with pytest.raises(config.ConfigError, match="bind_address"):
+        config.validate_config(data)
+
+
 def test_invalid_runtime_backend_fails_validation():
     data = config.default_config()
     data["runtime"]["backend"] = "docker"

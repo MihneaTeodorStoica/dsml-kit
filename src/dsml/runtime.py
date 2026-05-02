@@ -635,12 +635,20 @@ def workspace_url(options: RuntimeOptions, *, api: bool = False) -> str:
 
 
 def port_is_free(bind_address: str, port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        try:
-            sock.bind((bind_address, port))
-        except OSError:
+    try:
+        with socket.create_connection((_port_probe_address(bind_address), port), timeout=0.5):
             return False
-    return True
+    except ConnectionRefusedError:
+        return True
+    except (OSError, TimeoutError):
+        return False
+
+
+def _port_probe_address(bind_address: str) -> str:
+    address = bind_address.strip()
+    if address in {"0.0.0.0", "::", "[::]"}:
+        return "127.0.0.1"
+    return address
 
 
 def dev_test() -> subprocess.CompletedProcess[str]:
