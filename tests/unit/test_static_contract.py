@@ -16,11 +16,20 @@ def read_repo_file(path):
 def test_dockerfile_uses_pinned_base_image_uv_and_healthcheck():
     dockerfile = read_repo_file("images/base/Dockerfile")
 
-    assert dockerfile[0].startswith("FROM quay.io/jupyter/minimal-notebook:python-3.11@sha256:")
-    assert any("COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv" in line for line in dockerfile)
-    assert any("uv pip install --system -r /tmp/requirements.txt" in line for line in dockerfile)
+    assert dockerfile[0] == "ARG PYTHON_VERSION=3.11"
+    assert any("FROM quay.io/jupyter/minimal-notebook:python-${PYTHON_VERSION}" in line for line in dockerfile)
+    assert any("ARG DSML_REQUIREMENTS=requirements-base.txt" in line for line in dockerfile)
+    assert any("ARG DSML_EXTRA_APT_PACKAGES" in line for line in dockerfile)
+    assert any("COPY --from=uv /uv /usr/local/bin/uv" in line for line in dockerfile)
+    assert any("COPY --chown=${NB_UID}:${NB_GID} images/base/requirements*.txt" in line for line in dockerfile)
+    assert any('uv pip install --system -r "/tmp/dsml-requirements/${DSML_REQUIREMENTS}"' in line for line in dockerfile)
     assert any(line.startswith("HEALTHCHECK ") for line in dockerfile)
     assert any("socket.create_connection(('127.0.0.1', 8888), 5)" in line for line in dockerfile)
+
+
+def test_runtime_image_variants_have_separate_requirements_files():
+    for variant in ("minimal", "base", "extended", "full"):
+        assert (REPO_ROOT / "images" / "base" / f"requirements-{variant}.txt").is_file()
 
 
 def test_dockerignore_excludes_local_runtime_state():

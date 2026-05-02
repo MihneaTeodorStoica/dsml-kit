@@ -4,12 +4,12 @@ Profile-based Dockerized JupyterLab workspaces for data science and machine
 learning.
 
 `dsml-kit` installs the `dsml` command. `dsml` manages a workspace from a
-project-local `dsml.toml`, prepares the runtime image, writes generated Docker
+project-local `dsml.yml`, prepares the runtime image, writes generated Docker
 Compose state, mounts your project files into JupyterLab, and keeps
 notebook/runtime dependencies out of your host Python environment.
 
 ```bash
-pipx install dsml-kit
+uv tool install dsml-kit
 mkdir my-project
 cd my-project
 dsml init --profile minimal
@@ -21,8 +21,8 @@ dsml up
 ## What You Get
 
 - A simple `dsml` CLI as the product interface.
-- Project-local configuration in `dsml.toml`, not `.env`.
-- Curated profiles for minimal, full, GPU, and maintainer development workspaces.
+- Project-local configuration in `dsml.yml`, not `.env`.
+- Curated profiles for minimal, base, extended, full, GPU runtime, and maintainer development workspaces.
 - A Docker runtime image built from `images/base/Dockerfile`.
 - Generated Compose state under `.dsml/`.
 - `./workspace/` mounted into the container at `/home/jovyan/work` by default.
@@ -46,8 +46,6 @@ dsml doctor
 
 ## Installation
 
-Choose the installation style that matches how you manage Python CLI tools.
-
 ### uv
 
 ```bash
@@ -61,20 +59,7 @@ Upgrade later with:
 uv tool upgrade dsml-kit
 ```
 
-### pipx
-
-```bash
-pipx install dsml-kit
-dsml --help
-```
-
-Upgrade later with:
-
-```bash
-pipx upgrade dsml-kit
-```
-
-### pip User Install
+### pip
 
 ```bash
 python -m pip install --user dsml-kit
@@ -88,7 +73,7 @@ still run the CLI with:
 python -m dsml --help
 ```
 
-### Virtual Environment
+Or install into a virtual environment:
 
 ```bash
 python -m venv .venv
@@ -106,7 +91,7 @@ uv tool install git+https://github.com/MihneaTeodorStoica/dsml-kit
 or:
 
 ```bash
-pipx install git+https://github.com/MihneaTeodorStoica/dsml-kit
+python -m pip install git+https://github.com/MihneaTeodorStoica/dsml-kit
 ```
 
 ### Local Development
@@ -128,7 +113,7 @@ git clone https://github.com/MihneaTeodorStoica/dsml-kit
 cd dsml-kit
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -e ".[dev]"
 dsml --help
 ```
 
@@ -162,7 +147,7 @@ cd my-project
 dsml init --profile minimal
 ```
 
-`dsml init` writes `dsml.toml` in the current directory. Useful options:
+`dsml init` writes `dsml.yml` in the current directory. Useful options:
 
 ```bash
 dsml init --profile full
@@ -215,7 +200,7 @@ Common command behavior:
 - `dsml down` is currently the same as `dsml stop`.
 
 The supported interface is the `dsml` command. Runtime state such as
-`.dsml/compose.yaml` is generated from `dsml.toml` and should not be edited by
+`.dsml/compose.yaml` is generated from `dsml.yml` and should not be edited by
 hand.
 
 ## Profiles
@@ -228,18 +213,21 @@ dsml profiles
 
 Available profiles:
 
-- `minimal`: small JupyterLab data science workspace.
-- `full`: batteries-included DS/ML workspace.
-- `gpu`: GPU-ready ML workspace.
+- `minimal`: small JupyterLab workspace.
+- `base`: core numeric Python workspace with common data science packages.
+- `extended`: broader analytics workspace with columnar, plotting, and stats packages.
+- `full`: batteries-included workspace with editor and language tooling.
+- `gpu`: full workspace image with GPU access requested at runtime.
 - `dev`: local development image for dsml-kit maintainers.
 
-Profiles choose the default runtime image and GPU behavior. You can still
-override individual settings in `dsml.toml`.
+Profiles choose the default runtime image and GPU behavior. GPU is a runtime
+setting, not a separate image variant. You can still
+override individual settings in `dsml.yml`.
 
 ## Images And Builds
 
-For normal project use, `dsml up` uses the image configured in `dsml.toml`.
-With the default `image_policy = "auto"`, it pulls missing published images and
+For normal project use, `dsml up` uses the image configured in `dsml.yml`.
+With the default `image_policy: auto`, it pulls missing published images and
 builds the local development image when the selected image is `dsml-kit:dev`.
 
 Force an image pull for one run:
@@ -265,7 +253,7 @@ dsml logs --since 10m --timestamps
 dsml shell --root
 ```
 
-The `--pull` and `--build` flags override the image policy in `dsml.toml` for a single run. `--recreate` forwards to Docker Compose service recreation, and `--no-wait` skips the Jupyter readiness probe when you want the command to return immediately.
+The `--pull` and `--build` flags override the image policy in `dsml.yml` for a single run. `--recreate` forwards to Docker Compose service recreation, and `--no-wait` skips the Jupyter readiness probe when you want the command to return immediately.
 
 For debugging, inspect the generated Compose file:
 
@@ -281,6 +269,28 @@ Build the runtime image from this repository:
 ```bash
 uv run dsml image build --tag dsml-kit:latest
 ```
+
+Build a custom image from a project-local Dockerfile:
+
+```bash
+dsml image build --tag my-dsml:local --context docker --dockerfile Dockerfile --target prod --build-arg PYTHON_VERSION=3.12
+```
+
+Build one of the bundled dependency variants locally:
+
+```bash
+dsml image build --tag dsml-kit:minimal --variant minimal
+dsml image build --tag dsml-kit:base --variant base
+dsml image build --tag dsml-kit:extended --variant extended
+dsml image build --tag dsml-kit:full --variant full
+```
+
+The default Dockerfile is intentionally configurable with build args:
+
+- `PYTHON_VERSION`: `3.10`, `3.11`, or `3.12`
+- `UV_VERSION`: uv image tag used for the copied `uv` binary
+- `DSML_REQUIREMENTS`: one of the `requirements-*.txt` files
+- `DSML_EXTRA_APT_PACKAGES`: optional space-separated apt packages
 
 Build and use the maintainer development image:
 
@@ -314,58 +324,78 @@ dsml image remove
 ```
 
 Use image builds when you are developing the runtime image from a source
-checkout. Project-specific Python packages usually belong in `dsml.toml` via
+checkout. Project-specific Python packages usually belong in `dsml.yml` via
 `dsml add`; reusable notebook/runtime packages belong in
-`images/base/requirements.txt`.
+`images/base/requirements-*.txt`.
+
+The published image variants are built from the same Dockerfile with different
+requirements files:
+
+- `minimal`: `images/base/requirements-minimal.txt`
+- `base`: `images/base/requirements-base.txt`
+- `extended`: `images/base/requirements-extended.txt`
+- `full`: `images/base/requirements-full.txt`
 
 ## Configuration
 
-`dsml.toml` is the workspace config file. It is safe to edit by hand.
+`dsml.yml` is the workspace config file. It is safe to edit by hand.
 
-```toml
-[runtime]
-backend = "compose"
+```yaml
+runtime:
+  backend: compose
 
-[workspace]
-profile = "minimal"
-mount = "./workspace"
-port = 8888
-bind_address = "127.0.0.1"
-container_name = "auto"
-home_volume = "auto"
-gpu = "auto"
-image = "ghcr.io/mihneateodorstoica/dsml-kit:minimal"
-image_policy = "auto"
-jupyter_token = "auto"
+workspace:
+  profile: minimal
+  mount: ./workspace
+  port: 8888
+  bind_address: 127.0.0.1
+  container_name: auto
+  home_volume: auto
+  gpu: auto
+  image: ghcr.io/mihneateodorstoica/dsml-kit:minimal
+  image_policy: auto
+  jupyter_token: auto
 
-[jupyter]
-root_dir = "/home/jovyan/work"
-base_url = "/"
-app_log_level = "WARN"
-server_log_level = "WARN"
-extra_args = []
+image_build:
+  context: .
+  dockerfile: images/base/Dockerfile
+  target: ""
+  args:
+    PYTHON_VERSION: "3.11"
+    DSML_REQUIREMENTS: requirements-minimal.txt
+  watch:
+    - images/base
+    - .dockerignore
 
-[packages]
-extra = []
+jupyter:
+  root_dir: /home/jovyan/work
+  base_url: /
+  app_log_level: WARN
+  server_log_level: WARN
+  extra_args: []
+
+packages:
+  extra: []
 ```
 
-`[runtime]` selects the workspace backend:
+`runtime` selects the workspace backend:
 
-- `backend`: currently `compose`; `dsml` generates and manages Docker Compose from `dsml.toml`
+- `backend`: currently `compose`; `dsml` generates and manages Docker Compose from `dsml.yml`
 
 Important settings:
 
-- `profile`: bundled profile name, such as `minimal`, `full`, `gpu`, or `dev`.
-- `mount`: host path mounted into the container, relative to `dsml.toml`.
+- `profile`: bundled profile name, such as `minimal`, `base`, `extended`, `full`, `gpu`, or `dev`.
+- `mount`: host path mounted into the container, relative to `dsml.yml`.
 - `port` and `bind_address`: where JupyterLab is exposed on the host.
 - `container_name`: Docker container name, or `auto` for a project-derived name.
 - `home_volume`: Docker volume mounted at `/home/jovyan`, or `auto`.
 - `gpu`: `auto`, `true`, or `false`.
 - `image`: runtime image used by `dsml up`.
 - `image_policy`: `auto`, `pull`, `build`, or `never`.
+- `image_build`: Docker build context, Dockerfile, optional target, build args, and watch paths used by `image_policy: build`, `dsml up --build`, and `dsml watch`.
 - `jupyter_token`: a fixed token or `auto`.
 - `extra_args`: additional `start-notebook.py` arguments.
-- `[packages].extra`: packages installed by `dsml add` or `dsml sync`.
+- `packages.extra`: packages installed by `dsml add` or `dsml sync`.
 
 Image policy behavior:
 
@@ -376,7 +406,7 @@ Image policy behavior:
 
 ## Adding Packages
 
-Add project-specific packages to `dsml.toml`:
+Add project-specific packages to `dsml.yml`:
 
 ```bash
 dsml add polars optuna
@@ -387,7 +417,7 @@ dsml add -r requirements.txt
 If the container is running, `dsml add` also installs the packages immediately
 inside the container with `uv pip install --system`.
 
-Install everything already listed in `[packages].extra` into a running
+Install everything already listed in `packages.extra` into a running
 container:
 
 ```bash
@@ -396,13 +426,13 @@ dsml sync
 
 Requirement files may contain package specifiers and nested `-r other.txt`
 includes. General pip options such as `--extra-index-url` are intentionally not
-copied into `dsml.toml`.
+copied into `dsml.yml`.
 
 Keep the dependency split clear:
 
 - CLI dependencies live in `pyproject.toml`.
-- Runtime notebook/data packages live in `images/base/requirements.txt`.
-- Project-specific additions live in `[packages].extra`.
+- Runtime notebook/data packages live in `images/base/requirements-*.txt`.
+- Project-specific additions live in `packages.extra`.
 
 ## GPU Workspaces
 
@@ -413,8 +443,8 @@ dsml init --profile gpu --gpu true
 dsml up
 ```
 
-`gpu = "auto"` uses the profile default. The `gpu` profile requests NVIDIA GPU
-access; the `minimal` profile does not.
+`gpu: auto` uses the profile default. The `gpu` profile uses the full image and
+requests NVIDIA GPU access at runtime; the `minimal` profile does not.
 
 If GPU startup fails, run:
 
@@ -422,7 +452,7 @@ If GPU startup fails, run:
 dsml doctor
 ```
 
-It checks Docker, Docker Compose v2, the daemon, `dsml.toml`, the selected
+It checks Docker, Docker Compose v2, the daemon, `dsml.yml`, the selected
 profile, the configured port, the selected image, and NVIDIA prerequisites when
 GPU mode is enabled.
 
@@ -470,7 +500,7 @@ Or, without uv:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -e ".[dev]"
 ```
 
 Run the CLI from the checkout:
@@ -488,7 +518,7 @@ uv run pytest tests/unit
 Build the validation image and run integration tests:
 
 ```bash
-docker build -f images/base/Dockerfile -t dsml-kit:validate .
+docker build -f images/base/Dockerfile --build-arg DSML_REQUIREMENTS=requirements-full.txt -t dsml-kit:validate .
 DSML_TEST_IMAGE=dsml-kit:validate uv run pytest tests/integration
 ```
 
@@ -508,9 +538,9 @@ uv run dsml image remove dsml-kit:latest
 
 ## Runtime Backend
 
-The CLI lifecycle is routed through a runtime backend layer. The default and only supported backend is `compose`, which writes `.dsml/compose.yaml` from `dsml.toml` and then calls Docker Compose v2 for `up`, `watch`, `stop`, `logs`, `exec`, `down`, status checks, and debug config rendering.
+The CLI lifecycle is routed through a runtime backend layer. The default and only supported backend is `compose`, which writes `.dsml/compose.yaml` from `dsml.yml` and then calls Docker Compose v2 for `up`, `watch`, `stop`, `logs`, `exec`, `down`, status checks, and debug config rendering.
 
-This keeps the product interface as `dsml` while making the actual workspace lifecycle a normal Compose project under the hood. Dockerfiles still define the runtime image; `dsml.toml` remains the source of truth for workspace settings.
+This keeps the product interface as `dsml` while making the actual workspace lifecycle a normal Compose project under the hood. Dockerfiles still define the runtime image; `dsml.yml` remains the source of truth for workspace settings.
 
 ## Troubleshooting
 
@@ -534,5 +564,5 @@ For live debugging:
 ```bash
 dsml logs --follow
 dsml shell
-cat dsml.toml
+cat dsml.yml
 ```

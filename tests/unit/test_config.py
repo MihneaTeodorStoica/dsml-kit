@@ -1,15 +1,15 @@
-import tomllib
-
 import pytest
+import yaml
 
 from dsml import config
 
 
 def test_write_and_read_default_config(tmp_path):
-    path = tmp_path / "dsml.toml"
+    path = tmp_path / "dsml.yml"
     data = config.create_project_config(
         profile="minimal",
         profile_image="ghcr.io/mihneateodorstoica/dsml-kit:minimal",
+        profile_image_build={"args": {"DSML_REQUIREMENTS": "requirements-minimal.txt"}},
         port=8899,
         gpu=False,
         image=None,
@@ -17,27 +17,56 @@ def test_write_and_read_default_config(tmp_path):
 
     config.write_config(path, data)
 
-    written = tomllib.loads(path.read_text())
+    written = yaml.safe_load(path.read_text())
     assert written["runtime"]["backend"] == "compose"
     assert written["workspace"]["profile"] == "minimal"
     assert written["workspace"]["port"] == 8899
     assert written["workspace"]["jupyter_token"] == "auto"
     assert written["workspace"]["image_policy"] == "auto"
     assert written["workspace"]["mount"] == "./workspace"
+    assert written["image_build"]["context"] == "."
+    assert written["image_build"]["dockerfile"] == "images/base/Dockerfile"
+    assert written["image_build"]["args"]["DSML_REQUIREMENTS"] == "requirements-minimal.txt"
     assert written["jupyter"]["root_dir"] == "/home/jovyan/work"
     assert written["packages"]["extra"] == []
 
 
 def test_write_config_refuses_to_overwrite_without_force(tmp_path):
-    path = tmp_path / "dsml.toml"
-    path.write_text("[workspace]\n")
+    path = tmp_path / "dsml.yml"
+    path.write_text("workspace:\n")
 
     with pytest.raises(config.ConfigError, match="already exists"):
         config.write_config(path, config.default_config())
 
 
-def test_add_packages_preserves_order_and_deduplicates(tmp_path):
+def test_read_config_supports_legacy_toml(tmp_path):
     path = tmp_path / "dsml.toml"
+    path.write_text(
+        "\n".join(
+            [
+                "[workspace]",
+                'profile = "minimal"',
+                'mount = "./workspace"',
+                "port = 8899",
+                'bind_address = "127.0.0.1"',
+                'container_name = "auto"',
+                'home_volume = "auto"',
+                'gpu = "auto"',
+                'image = "example:test"',
+                'image_policy = "auto"',
+                'jupyter_token = "auto"',
+            ]
+        )
+    )
+
+    data = config.read_config(path)
+
+    assert data["workspace"]["image"] == "example:test"
+    assert data["image_build"]["dockerfile"] == "images/base/Dockerfile"
+
+
+def test_add_packages_preserves_order_and_deduplicates(tmp_path):
+    path = tmp_path / "dsml.yml"
     config.write_config(path, config.default_config())
 
     data = config.add_packages(path, ["polars", "optuna", "polars"])

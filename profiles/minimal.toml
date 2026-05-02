@@ -1,4 +1,0 @@
-name = "minimal"
-image = "ghcr.io/mihneateodorstoica/dsml-kit:minimal"
-description = "Small JupyterLab data science workspace."
-gpu = false

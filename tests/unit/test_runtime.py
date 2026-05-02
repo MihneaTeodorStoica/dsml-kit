@@ -11,7 +11,7 @@ def completed(args):
 
 
 def write_workspace(tmp_path, data=None):
-    config.write_config(tmp_path / "dsml.toml", data or config.default_config())
+    config.write_config(tmp_path / "dsml.yml", data or config.default_config())
 
 
 def read_compose_file(tmp_path):
@@ -65,14 +65,14 @@ def test_up_writes_compose_file_before_starting(tmp_path, monkeypatch):
 def test_up_builds_dev_image_from_config_before_starting(tmp_path, monkeypatch):
     data = config.default_config(profile="dev", image="dsml-kit:dev")
     data["workspace"]["gpu"] = False
-    config.write_config(tmp_path / "dsml.toml", data)
+    config.write_config(tmp_path / "dsml.yml", data)
     monkeypatch.chdir(tmp_path)
     calls = []
 
     monkeypatch.setattr(
         runtime.images,
         "build_image",
-        lambda tag=runtime.images.DEFAULT_LOCAL_IMAGE, dev=False: calls.append(("build", tag, dev)),
+        lambda tag=runtime.images.DEFAULT_LOCAL_IMAGE, dev=False, **kwargs: calls.append(("build", tag, dev, kwargs)),
     )
     monkeypatch.setattr(runtime.docker, "image_exists", lambda image: calls.append(("image_exists", image)) or True)
     monkeypatch.setattr(runtime.docker, "image_id", lambda image: "sha256:test")
@@ -80,7 +80,7 @@ def test_up_builds_dev_image_from_config_before_starting(tmp_path, monkeypatch):
 
     runtime.up()
 
-    assert calls[0] == ("build", "dsml-kit:dev", False)
+    assert calls[0] == ("build", "dsml-kit:dev", True, {})
     assert ("up", paths.compose_path(tmp_path), True) in calls
     assert read_compose_file(tmp_path)["services"]["app"]["image"] == "dsml-kit:dev"
 
@@ -128,13 +128,16 @@ def test_up_honors_build_image_policy_before_starting(tmp_path, monkeypatch):
     data = config.default_config(image="example/dsml-kit:local")
     data["workspace"]["image_policy"] = "build"
     write_workspace(tmp_path, data)
+    image_dir = tmp_path / "images" / "base"
+    image_dir.mkdir(parents=True)
+    (image_dir / "Dockerfile").write_text("FROM example\n")
     monkeypatch.chdir(tmp_path)
     calls = []
 
     monkeypatch.setattr(
         runtime.images,
         "build_image",
-        lambda tag=runtime.images.DEFAULT_LOCAL_IMAGE, dev=False: calls.append(("build", tag, dev)),
+        lambda tag=runtime.images.DEFAULT_LOCAL_IMAGE, dev=False, **kwargs: calls.append(("build", tag, dev, kwargs)),
     )
     monkeypatch.setattr(runtime.docker, "image_exists", lambda image: calls.append(("image_exists", image)) or True)
     monkeypatch.setattr(runtime.docker, "image_id", lambda image: "sha256:test")
@@ -142,7 +145,9 @@ def test_up_honors_build_image_policy_before_starting(tmp_path, monkeypatch):
 
     runtime.up()
 
-    assert calls[0] == ("build", "example/dsml-kit:local", False)
+    assert calls[0][:3] == ("build", "example/dsml-kit:local", False)
+    assert calls[0][3]["context"] == tmp_path
+    assert calls[0][3]["dockerfile"] == tmp_path / "images" / "base" / "Dockerfile"
     assert ("up", paths.compose_path(tmp_path), True) in calls
 
 
@@ -162,7 +167,7 @@ def test_up_build_policy_writes_runtime_watch_metadata(tmp_path, monkeypatch):
     monkeypatch.setattr(
         runtime.images,
         "build_image",
-        lambda tag=runtime.images.DEFAULT_LOCAL_IMAGE, dev=False: calls.append(("build", tag, dev)),
+        lambda tag=runtime.images.DEFAULT_LOCAL_IMAGE, dev=False, **kwargs: calls.append(("build", tag, dev, kwargs)),
     )
     monkeypatch.setattr(runtime.docker, "image_exists", lambda image: True)
     monkeypatch.setattr(runtime.docker, "image_id", lambda image: "sha256:test")
@@ -171,10 +176,65 @@ def test_up_build_policy_writes_runtime_watch_metadata(tmp_path, monkeypatch):
     runtime.up(wait=False)
 
     service = read_compose_file(tmp_path)["services"]["app"]
-    assert service["build"] == {"context": ".", "dockerfile": "images/base/Dockerfile"}
+    assert service["build"] == {
+        "context": ".",
+        "dockerfile": "images/base/Dockerfile",
+        "args": {
+            "PYTHON_VERSION": "3.11",
+            "DSML_REQUIREMENTS": "requirements-minimal.txt",
+        },
+    }
     assert service["develop"]["watch"] == [
         {"action": "rebuild", "path": "images/base"},
         {"action": "rebuild", "path": ".dockerignore"},
+    ]
+
+
+def test_up_build_policy_honors_custom_image_build_config(tmp_path, monkeypatch):
+    data = config.default_config(image="example/dsml-kit:custom")
+    data["workspace"]["image_policy"] = "build"
+    data["image_build"] = {
+        "context": "docker",
+        "dockerfile": "runtime.Dockerfile",
+        "target": "prod",
+        "args": {"PYTHON_VERSION": "3.12"},
+        "watch": ["docker/runtime.Dockerfile", "docker/requirements.txt"],
+    }
+    write_workspace(tmp_path, data)
+    docker_dir = tmp_path / "docker"
+    docker_dir.mkdir()
+    (docker_dir / "runtime.Dockerfile").write_text("FROM example AS prod\n")
+    (docker_dir / "requirements.txt").write_text("\n")
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    monkeypatch.setattr(
+        runtime.images,
+        "build_image",
+        lambda tag=runtime.images.DEFAULT_LOCAL_IMAGE, dev=False, **kwargs: calls.append(("build", tag, dev, kwargs)),
+    )
+    monkeypatch.setattr(runtime.docker, "image_exists", lambda image: True)
+    monkeypatch.setattr(runtime.docker, "image_id", lambda image: "sha256:test")
+    stub_compose_up(monkeypatch, calls)
+
+    runtime.up(wait=False)
+
+    assert calls[0][3] == {
+        "context": docker_dir,
+        "dockerfile": docker_dir / "runtime.Dockerfile",
+        "target": "prod",
+        "build_args": {"PYTHON_VERSION": "3.12"},
+    }
+    service = read_compose_file(tmp_path)["services"]["app"]
+    assert service["build"] == {
+        "context": "docker",
+        "dockerfile": "runtime.Dockerfile",
+        "target": "prod",
+        "args": {"PYTHON_VERSION": "3.12"},
+    }
+    assert service["develop"]["watch"] == [
+        {"action": "rebuild", "path": "docker/runtime.Dockerfile"},
+        {"action": "rebuild", "path": "docker/requirements.txt"},
     ]
 
 
@@ -186,7 +246,7 @@ def test_up_honors_never_image_policy_for_missing_image(tmp_path, monkeypatch):
 
     monkeypatch.setattr(runtime.docker, "image_exists", lambda image: False)
     monkeypatch.setattr(runtime.images, "pull_image", lambda image: pytest.fail("should not pull"))
-    monkeypatch.setattr(runtime.images, "build_image", lambda tag, dev=False: pytest.fail("should not build"))
+    monkeypatch.setattr(runtime.images, "build_image", lambda tag, dev=False, **kwargs: pytest.fail("should not build"))
 
     with pytest.raises(runtime.RuntimeError, match="image_policy is set to never"):
         runtime.up()
@@ -200,7 +260,7 @@ def test_up_dev_build_uses_dev_image(tmp_path, monkeypatch):
     monkeypatch.setattr(
         runtime.images,
         "build_image",
-        lambda tag=runtime.images.DEFAULT_LOCAL_IMAGE, dev=False: calls.append(("build", tag, dev)),
+        lambda tag=runtime.images.DEFAULT_LOCAL_IMAGE, dev=False, **kwargs: calls.append(("build", tag, dev, kwargs)),
     )
     monkeypatch.setattr(runtime.docker, "image_exists", lambda image: True)
     monkeypatch.setattr(runtime.docker, "image_id", lambda image: "sha256:test")
@@ -208,7 +268,7 @@ def test_up_dev_build_uses_dev_image(tmp_path, monkeypatch):
 
     runtime.up(dev=True, build=True)
 
-    assert ("build", runtime.images.DEFAULT_DEV_IMAGE, True) in calls
+    assert ("build", runtime.images.DEFAULT_DEV_IMAGE, True, {}) in calls
     assert read_compose_file(tmp_path)["services"]["app"]["image"] == runtime.images.DEFAULT_DEV_IMAGE
 
 
@@ -263,7 +323,7 @@ def test_up_wait_timeout_controls_jupyter_attempts(tmp_path, monkeypatch):
 def test_up_reuses_matching_auto_token_in_compose_file(tmp_path, monkeypatch):
     write_workspace(tmp_path)
     monkeypatch.chdir(tmp_path)
-    data = config.read_config(tmp_path / "dsml.toml")
+    data = config.read_config(tmp_path / "dsml.yml")
     options = runtime.run_options(tmp_path, data)
     signature = runtime.container_signature(options, image_id="sha256:test", token_policy="auto")
     calls = []
@@ -459,7 +519,7 @@ def test_add_updates_config_and_installs_with_compose_exec_when_running(tmp_path
 
     runtime.add(["polars", "optuna"])
 
-    assert config.read_config(tmp_path / "dsml.toml")["packages"]["extra"] == ["polars", "optuna"]
+    assert config.read_config(tmp_path / "dsml.yml")["packages"]["extra"] == ["polars", "optuna"]
     assert calls == [
         (
             ["uv", "pip", "install", "--system", "polars", "optuna"],
@@ -485,7 +545,7 @@ def test_add_reads_requirement_files_and_installs_specs(tmp_path, monkeypatch):
 
     runtime.add([], [requirements])
 
-    assert config.read_config(tmp_path / "dsml.toml")["packages"]["extra"] == ["polars>=1.0", "optuna"]
+    assert config.read_config(tmp_path / "dsml.yml")["packages"]["extra"] == ["polars>=1.0", "optuna"]
     assert calls == [
         (
             ["uv", "pip", "install", "--system", "polars>=1.0", "optuna"],

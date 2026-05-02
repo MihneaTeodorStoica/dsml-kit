@@ -1,0 +1,11 @@
+-r requirements-base.txt
+duckdb==1.5.2
+polars==1.40.1
+polars-runtime-32==1.40.1
+pyarrow==24.0.0
+plotly==6.7.0
+seaborn==0.13.2
+statsmodels==0.14.6
+beautifulsoup4==4.12.3
+lxml==6.1.0
+pillow==12.2.0

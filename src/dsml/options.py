@@ -37,4 +37,6 @@ class RuntimeOptions:
     run_signature: str = ""
     build_context: Path | None = None
     build_dockerfile: Path | None = None
+    build_target: str = ""
+    build_args: dict[str, str] = field(default_factory=dict)
     watch: list[WatchRule] = field(default_factory=list)

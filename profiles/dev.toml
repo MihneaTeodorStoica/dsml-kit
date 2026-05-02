@@ -1,4 +1,0 @@
-name = "dev"
-image = "dsml-kit:dev"
-description = "Local development image for dsml-kit maintainers."
-gpu = false

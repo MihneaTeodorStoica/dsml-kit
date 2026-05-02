@@ -1,0 +1,8 @@
+name: dev
+image: dsml-kit:dev
+description: Local development image for dsml-kit maintainers.
+gpu: false
+image_build:
+  args:
+    PYTHON_VERSION: "3.11"
+    DSML_REQUIREMENTS: requirements-full.txt

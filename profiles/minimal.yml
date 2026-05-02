@@ -1,0 +1,8 @@
+name: minimal
+image: ghcr.io/mihneateodorstoica/dsml-kit:minimal
+description: Small JupyterLab data science workspace.
+gpu: false
+image_build:
+  args:
+    PYTHON_VERSION: "3.11"
+    DSML_REQUIREMENTS: requirements-minimal.txt

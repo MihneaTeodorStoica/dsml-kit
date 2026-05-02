@@ -5,20 +5,20 @@
 - This is an installable Python CLI package that manages Dockerized JupyterLab DS/ML workspaces.
 - The `dsml` command is the product interface; do not reintroduce Makefile or Compose as the primary UX.
 - The Docker image remains the actual notebook/runtime environment and is built from `images/base/Dockerfile`.
-- Runtime image packages live in `images/base/requirements.txt`; do not put heavy ML/Jupyter dependencies in `pyproject.toml`.
-- User workspace config is `dsml.toml`; `.env` is not a user-facing config path.
+- Runtime image packages live in `images/base/requirements-*.txt`; do not put heavy ML/Jupyter dependencies in `pyproject.toml`.
+- User workspace config is `dsml.yml`; `.env` is not a user-facing config path.
 
 ## Source Of Truth
 
 - `pyproject.toml`: Python package metadata, CLI dependencies, and dev test dependencies.
 - `src/dsml/cli.py`: Typer command definitions and user-facing wiring only.
-- `src/dsml/config.py`: reading, writing, validating, and updating `dsml.toml`.
-- `src/dsml/profiles.py` and `profiles/*.toml`: bundled profile metadata.
+- `src/dsml/config.py`: reading, writing, validating, and updating `dsml.yml`.
+- `src/dsml/profiles.py` and `profiles/*.yml`: bundled profile metadata.
 - `src/dsml/docker.py`: Docker command construction and subprocess helpers.
 - `src/dsml/runtime.py`: high-level workspace operations.
 - `src/dsml/doctor.py`: diagnostics.
 - `src/dsml/images.py`: maintainer image operations.
-- `images/base/requirements.txt`: container runtime packages.
+- `images/base/requirements-*.txt`: container runtime packages for each image variant.
 
 ## Commands
 
@@ -27,7 +27,7 @@
 - Generate config check: `uv run dsml init --profile minimal --force`.
 - Unit tests: `uv run pytest tests/unit`.
 - Full tests after a validation image exists: `DSML_TEST_IMAGE=dsml-kit:validate uv run pytest`.
-- Build validation image: `docker build -f images/base/Dockerfile -t dsml-kit:validate .`.
+- Build validation image: `docker build -f images/base/Dockerfile --build-arg DSML_REQUIREMENTS=requirements-full.txt -t dsml-kit:validate .`.
 - Maintainer validation: `uv run dsml dev validate`.
 
 ## Architecture Rules
@@ -36,7 +36,7 @@
 - Keep unit tests Docker-free when possible.
 - Put real container startup, Jupyter HTTP checks, and import-contract tests under `tests/integration`.
 - Update `tests/integration/test_import_contract.py` and any duplicate import contract together when changing key image packages.
-- Do not add CLI dependencies to `images/base/requirements.txt`.
+- Do not add CLI dependencies to `images/base/requirements-*.txt`.
 - Do not add image/runtime dependencies such as numpy, pandas, torch, JupyterLab, scikit-learn, matplotlib, or CUDA packages to `pyproject.toml`.
 
 ## Runtime Gotchas

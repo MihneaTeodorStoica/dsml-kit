@@ -80,6 +80,10 @@ def build_compose_model(options: RuntimeOptions) -> dict[str, Any]:
         }
         if options.build_dockerfile is not None:
             build["dockerfile"] = _context_path(options.build_context, options.build_dockerfile)
+        if options.build_target:
+            build["target"] = options.build_target
+        if options.build_args:
+            build["args"] = dict(options.build_args)
         service["build"] = build
 
     if options.watch:

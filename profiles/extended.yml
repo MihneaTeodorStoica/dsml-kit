@@ -1,0 +1,8 @@
+name: extended
+image: ghcr.io/mihneateodorstoica/dsml-kit:extended
+description: Broader analytics workspace with columnar, plotting, and stats packages.
+gpu: false
+image_build:
+  args:
+    PYTHON_VERSION: "3.11"
+    DSML_REQUIREMENTS: requirements-extended.txt

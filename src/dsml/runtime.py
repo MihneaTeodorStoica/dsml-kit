@@ -50,6 +50,7 @@ def init_project(
     data = config.create_project_config(
         profile=profile.name,
         profile_image=profile.image,
+        profile_image_build=profile.image_build,
         port=port,
         gpu=gpu,
         image=image,
@@ -62,7 +63,7 @@ def init_project(
 def load_workspace(start: Path | None = None) -> tuple[Path, Path, dict]:
     config_path = paths.locate_config(start)
     if config_path is None:
-        raise RuntimeError("No dsml.toml found. Run 'dsml init' first.")
+        raise RuntimeError("No dsml.yml found. Run 'dsml init' first.")
     project_root = config_path.parent
     return project_root, config_path, config.read_config(config_path)
 
@@ -204,10 +205,12 @@ def up(
         policy=image_policy,
         build=build,
         pull=pull,
-        dev=dev,
+        dev=dev or should_build_image(options.image),
+        image_build=data["image_build"],
+        project_root=project_root,
     )
     if should_use_runtime_image_source(options, policy=image_policy, build=build, dev=dev):
-        options = options_with_runtime_image_source(options)
+        options = options_with_runtime_image_source(options, data, dev=dev or should_build_image(options.image))
     options = replace(
         options,
         run_signature=container_signature(
@@ -262,9 +265,9 @@ def watch(
     if not should_use_runtime_image_source(options, policy=image_policy, build=False, dev=dev):
         raise RuntimeError(
             "Compose watch rebuilds a local runtime image. "
-            "Use the dev profile, set [workspace].image_policy to 'build', or pass --dev."
+            "Use the dev profile, set workspace.image_policy to 'build', or pass --dev."
         )
-    options = options_with_runtime_image_source(options)
+    options = options_with_runtime_image_source(options, data, dev=dev or should_build_image(options.image))
     options = replace(
         options,
         run_signature=container_signature(
@@ -428,10 +431,17 @@ def prepare_image(
     build: bool = False,
     pull: bool = False,
     dev: bool = False,
+    image_build: dict | None = None,
+    project_root: Path | None = None,
 ) -> None:
     policy = str(policy or "auto").strip().lower()
+    build_kwargs = image_build_kwargs(
+        image_build or {},
+        project_root=project_root or Path.cwd(),
+        dev=dev or should_build_image(image),
+    )
     if build or dev:
-        images.build_image(tag=image, dev=dev)
+        images.build_image(tag=image, dev=dev, **build_kwargs)
         if pull:
             images.pull_image(image)
         ensure_local_image(image)
@@ -443,7 +453,7 @@ def prepare_image(
         return
 
     if policy == "build" or (policy == "auto" and should_build_image(image)):
-        images.build_image(tag=image)
+        images.build_image(tag=image, **build_kwargs)
         ensure_local_image(image)
         return
 
@@ -460,12 +470,12 @@ def ensure_image_available(image: str, *, allow_pull: bool = True) -> None:
         return
     if not allow_pull:
         raise RuntimeError(
-            f"Image {image} is not present locally and [workspace].image_policy is set to never."
+            f"Image {image} is not present locally and workspace.image_policy is set to never."
         )
     if should_build_image(image):
         raise RuntimeError(
             f"Image {image} is not present locally. "
-            "Set [workspace].image_policy to 'build' or run 'dsml image build --dev'."
+            "Set workspace.image_policy to 'build' or run 'dsml image build --dev'."
         )
     console.print(f"Pulling {image} because it is not present locally.")
     try:
@@ -496,25 +506,50 @@ def should_use_runtime_image_source(
     return build or dev or policy == "build" or (policy == "auto" and should_build_image(options.image))
 
 
-def options_with_runtime_image_source(options: RuntimeOptions) -> RuntimeOptions:
-    source_root = paths.repo_root()
-    dockerfile = source_root / "images" / "base" / "Dockerfile"
-    image_requirements = source_root / "images" / "base" / "requirements.txt"
-    dockerignore = source_root / ".dockerignore"
-    if not dockerfile.is_file() or not image_requirements.is_file():
+def options_with_runtime_image_source(options: RuntimeOptions, data: dict, *, dev: bool = False) -> RuntimeOptions:
+    if dev:
+        source_root = paths.repo_root()
+        dockerfile = source_root / "images" / "base" / "Dockerfile"
+        watch_paths = [dockerfile.parent, source_root / ".dockerignore"]
+    else:
+        image_build = data["image_build"]
+        source_root = paths.resolve_mount_path(options.project_root, image_build["context"])
+        dockerfile = _resolve_image_build_dockerfile(source_root, image_build["dockerfile"])
+        watch_paths = [paths.resolve_mount_path(options.project_root, path) for path in image_build["watch"]]
+
+    if not dockerfile.is_file():
         raise RuntimeError(
-            "Compose watch requires the runtime image source tree. "
-            "Run it from a dsml-kit source checkout or use a published image with 'dsml up'."
+            f"Runtime image Dockerfile not found: {dockerfile}. "
+            "Update image_build.dockerfile or use a published image with 'dsml up'."
         )
     return replace(
         options,
         build_context=source_root,
         build_dockerfile=dockerfile,
-        watch=[
-            WatchRule(action="rebuild", path=dockerfile.parent),
-            WatchRule(action="rebuild", path=dockerignore),
-        ],
+        build_target="" if dev else str(data["image_build"].get("target", "")),
+        build_args={} if dev else dict(data["image_build"].get("args", {})),
+        watch=[WatchRule(action="rebuild", path=path) for path in watch_paths],
     )
+
+
+def image_build_kwargs(image_build: dict, *, project_root: Path, dev: bool = False) -> dict[str, object]:
+    if dev:
+        return {}
+    context = paths.resolve_mount_path(project_root, image_build.get("context", "."))
+    dockerfile = _resolve_image_build_dockerfile(context, str(image_build.get("dockerfile", "Dockerfile")))
+    return {
+        "context": context,
+        "dockerfile": dockerfile,
+        "target": str(image_build.get("target", "")),
+        "build_args": dict(image_build.get("args", {})),
+    }
+
+
+def _resolve_image_build_dockerfile(context: Path, dockerfile: str) -> Path:
+    path = Path(dockerfile).expanduser()
+    if path.is_absolute():
+        return path
+    return (context / path).resolve()
 
 
 def container_signature(
@@ -613,7 +648,10 @@ def dev_test() -> subprocess.CompletedProcess[str]:
 
 
 def dev_validate() -> None:
-    images.build_image(tag=images.VALIDATE_IMAGE)
+    images.build_image(
+        tag=images.VALIDATE_IMAGE,
+        build_args={"DSML_REQUIREMENTS": images.VALIDATE_REQUIREMENTS},
+    )
     env = os.environ.copy()
     env.update(images.validation_env())
     subprocess.run(["uv", "run", "pytest", "tests/integration"], check=True, env=env)

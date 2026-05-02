@@ -57,9 +57,9 @@ def init(
     port: Annotated[int, typer.Option(help="Host port for JupyterLab.")] = 8888,
     gpu: Annotated[str, typer.Option(help="GPU mode: auto, true, or false.")] = "auto",
     image: Annotated[str | None, typer.Option(help="Override the profile image.")] = None,
-    force: Annotated[bool, typer.Option(help="Overwrite an existing dsml.toml.")] = False,
+    force: Annotated[bool, typer.Option(help="Overwrite an existing dsml.yml.")] = False,
 ) -> None:
-    """Create dsml.toml in the current project."""
+    """Create dsml.yml in the current project."""
     try:
         gpu_value = config.validate_config(config.default_config(gpu=gpu))["workspace"]["gpu"]
         path = runtime.init_project(
@@ -205,7 +205,7 @@ def add(
         typer.Option("--requirement", "-r", help="Read package specifiers from a requirements.txt file."),
     ] = None,
 ) -> None:
-    """Add packages to dsml.toml and install them in the running container."""
+    """Add packages to dsml.yml and install them in the running container."""
     try:
         runtime.add(packages or [], requirements)
     except Exception as exc:  # noqa: BLE001
@@ -325,12 +325,86 @@ def list_profiles() -> None:
 def image_build(
     tag: Annotated[str, typer.Option(help="Image tag to build.")] = images.DEFAULT_LOCAL_IMAGE,
     dev: Annotated[bool, typer.Option(help="Build the development image tag.")] = False,
+    variant: Annotated[
+        str,
+        typer.Option(help="Image variant requirements to use: minimal, base, extended, or full."),
+    ] = "base",
+    context: Annotated[Path | None, typer.Option(help="Docker build context.")] = None,
+    dockerfile: Annotated[Path | None, typer.Option(help="Dockerfile path.")] = None,
+    target: Annotated[str, typer.Option(help="Optional Dockerfile stage target.")] = "",
+    build_arg: Annotated[
+        list[str] | None,
+        typer.Option("--build-arg", help="Docker build argument as KEY=VALUE. Can be used more than once."),
+    ] = None,
 ) -> None:
     """Build the runtime image."""
     try:
-        images.build_image(tag=tag, dev=dev)
+        if dev and (context is not None or dockerfile is not None or target or build_arg or variant != "base"):
+            raise typer.BadParameter("--dev uses the maintainer image defaults; do not combine it with custom build options.")
+        build_args = {} if dev else _image_build_args(variant, build_arg or [])
+        _validate_image_build_options(dev=dev, context=context, dockerfile=dockerfile, target=target, build_args=build_args)
+        images.build_image(
+            tag=tag,
+            dev=dev,
+            context=context,
+            dockerfile=dockerfile,
+            target=target,
+            build_args=build_args,
+        )
+    except (typer.BadParameter, ValueError) as exc:
+        _handle_error(exc)
     except Exception as exc:  # noqa: BLE001
         _handle_error(exc)
+
+
+def _image_build_args(variant: str, values: list[str]) -> dict[str, str]:
+    normalized = variant.strip().lower()
+    if normalized not in images.IMAGE_VARIANTS:
+        available = ", ".join(sorted(images.IMAGE_VARIANTS))
+        raise typer.BadParameter(f"--variant must be one of: {available}.")
+    parsed = {"DSML_REQUIREMENTS": images.IMAGE_VARIANTS[normalized]}
+    parsed.update(_parse_build_args(values))
+    return parsed
+
+
+def _validate_image_build_options(
+    *,
+    dev: bool,
+    context: Path | None,
+    dockerfile: Path | None,
+    target: str,
+    build_args: dict[str, str],
+) -> None:
+    if context is not None and not context.exists():
+        raise typer.BadParameter(f"Build context does not exist: {context}")
+    if dockerfile is not None and not dockerfile.is_file():
+        raise typer.BadParameter(f"Dockerfile does not exist: {dockerfile}")
+    requirements = build_args.get("DSML_REQUIREMENTS", "")
+    if "/" in requirements or "\\" in requirements or requirements.startswith("."):
+        raise typer.BadParameter("DSML_REQUIREMENTS must be a requirements file name, not a path.")
+    if not requirements.startswith("requirements-") or not requirements.endswith(".txt"):
+        raise typer.BadParameter("DSML_REQUIREMENTS must look like requirements-<variant>.txt.")
+    python_version = build_args.get("PYTHON_VERSION")
+    if python_version is not None and python_version not in {"3.10", "3.11", "3.12"}:
+        raise typer.BadParameter("PYTHON_VERSION must be one of: 3.10, 3.11, 3.12.")
+    apt_packages = build_args.get("DSML_EXTRA_APT_PACKAGES")
+    if apt_packages is not None and not all(char.isalnum() or char in "+_.: -" for char in apt_packages):
+        raise typer.BadParameter("DSML_EXTRA_APT_PACKAGES contains unsupported characters.")
+
+
+def _parse_build_args(values: list[str]) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for value in values:
+        if "=" not in value:
+            raise typer.BadParameter("--build-arg values must use KEY=VALUE.")
+        key, build_value = value.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise typer.BadParameter("--build-arg keys cannot be empty.")
+        if key.startswith("JUPYTER_TOKEN"):
+            raise typer.BadParameter("Do not pass secrets as Docker build args.")
+        parsed[key] = build_value
+    return parsed
 
 
 @image_app.command("pull")

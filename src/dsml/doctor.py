@@ -27,14 +27,14 @@ def run_checks(start: Path | None = None) -> list[Check]:
 
     config_path = paths.locate_config(start)
     if config_path is None:
-        checks.append(Check("dsml.toml", False, "Run 'dsml init' in this project."))
+        checks.append(Check("dsml.yml", False, "Run 'dsml init' in this project."))
         return checks
 
     try:
         data = config.read_config(config_path)
-        checks.append(Check("dsml.toml", True, str(config_path)))
+        checks.append(Check("dsml.yml", True, str(config_path)))
     except config.ConfigError as exc:
-        checks.append(Check("dsml.toml", False, str(exc)))
+        checks.append(Check("dsml.yml", False, str(exc)))
         return checks
 
     workspace = data["workspace"]

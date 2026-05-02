@@ -1,0 +1,8 @@
+name: base
+image: ghcr.io/mihneateodorstoica/dsml-kit:base
+description: Core numeric Python workspace with common data science packages.
+gpu: false
+image_build:
+  args:
+    PYTHON_VERSION: "3.11"
+    DSML_REQUIREMENTS: requirements-base.txt

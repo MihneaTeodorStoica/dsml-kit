@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 
 
-CONFIG_FILE = "dsml.toml"
+CONFIG_FILE = "dsml.yml"
+LEGACY_CONFIG_FILE = "dsml.toml"
 STATE_DIR = ".dsml"
 COMPOSE_FILE = "compose.yaml"
 PROJECT_LABEL = "dsml.project"
@@ -24,6 +25,8 @@ def find_project_root(start: Path | None = None) -> Path:
     for parent in (current, *current.parents):
         if (parent / CONFIG_FILE).is_file():
             return parent
+        if (parent / LEGACY_CONFIG_FILE).is_file():
+            return parent
         if (parent / ".git").exists():
             return parent
     return current
@@ -35,6 +38,9 @@ def locate_config(start: Path | None = None) -> Path | None:
         candidate = parent / CONFIG_FILE
         if candidate.is_file():
             return candidate
+        legacy_candidate = parent / LEGACY_CONFIG_FILE
+        if legacy_candidate.is_file():
+            return legacy_candidate
     return None
 
 

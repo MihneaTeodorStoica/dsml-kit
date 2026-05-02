@@ -1,0 +1,8 @@
+name: full
+image: ghcr.io/mihneateodorstoica/dsml-kit:full
+description: Batteries-included DS/ML workspace with editor and language tooling.
+gpu: auto
+image_build:
+  args:
+    PYTHON_VERSION: "3.11"
+    DSML_REQUIREMENTS: requirements-full.txt

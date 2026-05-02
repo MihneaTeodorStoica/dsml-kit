@@ -1,4 +1,10 @@
-FROM quay.io/jupyter/minimal-notebook:python-3.11@sha256:1f1fab5b452289aff0ed9c6d85a58f555a4682b773f1dad08c2fdb35273e9ea4
+ARG PYTHON_VERSION=3.11
+ARG UV_VERSION=latest
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+FROM quay.io/jupyter/minimal-notebook:python-${PYTHON_VERSION}
+
+ARG DSML_EXTRA_APT_PACKAGES=""
+ARG DSML_REQUIREMENTS=requirements-base.txt
 
 ENV JUPYTER_APP_LOG_LEVEL=WARN \
     JUPYTER_SERVER_LOG_LEVEL=WARN \
@@ -10,12 +16,18 @@ ENV JUPYTER_APP_LOG_LEVEL=WARN \
 
 USER root
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-COPY --chown=${NB_UID}:${NB_GID} images/base/requirements.txt /tmp/requirements.txt
+COPY --from=uv /uv /usr/local/bin/uv
+COPY --chown=${NB_UID}:${NB_GID} images/base/requirements*.txt /tmp/dsml-requirements/
 RUN mkdir -p /home/${NB_USER}/work \
     && chown ${NB_UID}:${NB_GID} /home/${NB_USER}/work \
-    && uv pip install --system -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt \
+    && if [ -n "${DSML_EXTRA_APT_PACKAGES}" ]; then \
+        apt-get update \
+        && apt-get install -y --no-install-recommends ${DSML_EXTRA_APT_PACKAGES} \
+        && apt-get clean \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi \
+    && uv pip install --system -r "/tmp/dsml-requirements/${DSML_REQUIREMENTS}" \
+    && rm -rf /tmp/dsml-requirements \
     && fix-permissions "${CONDA_DIR}" \
     && fix-permissions "/home/${NB_USER}"
 

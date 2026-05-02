@@ -1,3 +1,9 @@
 """dsml-kit CLI package."""
 
-__version__ = "0.1.6"
+from importlib.metadata import PackageNotFoundError, version
+
+
+try:
+    __version__ = version("dsml-kit")
+except PackageNotFoundError:
+    __version__ = "0+unknown"

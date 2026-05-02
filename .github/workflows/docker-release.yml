@@ -10,14 +10,15 @@ on:
 
 env:
   GHCR_IMAGE: ghcr.io/${{ github.repository }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHON_VERSION: "3.11"
+  VALIDATE_REQUIREMENTS: requirements-full.txt
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Check out repository
@@ -26,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
@@ -45,6 +46,9 @@ jobs:
         with:
           context: .
           file: images/base/Dockerfile
+          build-args: |
+            PYTHON_VERSION=${{ env.PYTHON_VERSION }}
+            DSML_REQUIREMENTS=${{ env.VALIDATE_REQUIREMENTS }}
           load: true
           push: false
           tags: dsml-kit:validate
@@ -58,14 +62,23 @@ jobs:
   publish:
     needs: validate
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: minimal
+            requirements: requirements-minimal.txt
+          - variant: base
+            requirements: requirements-base.txt
+          - variant: extended
+            requirements: requirements-extended.txt
+          - variant: full
+            requirements: requirements-full.txt
     permissions:
       attestations: write
       contents: read
       id-token: write
       packages: write
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -80,30 +93,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.GHCR_IMAGE }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=minimal,enable={{is_default_branch}}
-            type=raw,value=gpu,enable={{is_default_branch}}
-            type=raw,value=full,enable={{is_default_branch}}
-            type=ref,event=tag
-            type=sha,format=short
-            type=raw,value={{date 'YYYY-MM-DD'}}
-
-      - name: Build and push image
+      - name: Build and push ${{ matrix.variant }} image
         id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           file: images/base/Dockerfile
+          build-args: |
+            PYTHON_VERSION=${{ env.PYTHON_VERSION }}
+            DSML_REQUIREMENTS=${{ matrix.requirements }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=docker-image
-          cache-to: type=gha,mode=max,scope=docker-image
+          tags: |
+            ${{ env.GHCR_IMAGE }}:${{ matrix.variant }}
+            ${{ env.GHCR_IMAGE }}:${{ matrix.variant }}-${{ github.sha }}
+          cache-from: type=gha,scope=docker-image-${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=docker-image-${{ matrix.variant }}
           provenance: mode=max
           sbom: true
