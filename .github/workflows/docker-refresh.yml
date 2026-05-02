@@ -90,6 +90,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Normalize image name
+        id: image
+        run: echo "name=${GHCR_IMAGE,,}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push ${{ matrix.variant }} daily image
         id: build
         uses: docker/build-push-action@v7
@@ -101,7 +105,7 @@ jobs:
             DSML_REQUIREMENTS=${{ matrix.requirements }}
           push: true
           tags: |
-            ${{ env.GHCR_IMAGE }}:${{ matrix.variant }}-daily
+            ${{ steps.image.outputs.name }}:${{ matrix.variant }}-daily
           cache-from: type=gha,scope=docker-image-${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=docker-image-${{ matrix.variant }}
           provenance: mode=max
