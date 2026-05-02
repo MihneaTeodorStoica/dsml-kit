@@ -1,0 +1,55 @@
+name: Clean Old Caches
+
+on:
+  schedule:
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      MAX_CACHE_AGE_HOURS: "48"
+
+    steps:
+      - name: Delete caches older than 48 hours
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          import subprocess
+          from datetime import datetime, timedelta, timezone
+
+          repo = os.environ["REPO"]
+          max_age = timedelta(hours=int(os.environ["MAX_CACHE_AGE_HOURS"]))
+          cutoff = datetime.now(timezone.utc) - max_age
+
+          result = subprocess.run(
+              ["gh", "cache", "list", "--repo", repo, "--limit", "1000", "--json", "id,key,lastAccessedAt"],
+              check=True,
+              text=True,
+              capture_output=True,
+          )
+          caches = json.loads(result.stdout)
+          deleted = 0
+
+          for cache in caches:
+              last_accessed = datetime.fromisoformat(cache["lastAccessedAt"].replace("Z", "+00:00"))
+              if last_accessed >= cutoff:
+                  continue
+              subprocess.run(["gh", "cache", "delete", str(cache["id"]), "--repo", repo], check=True)
+              deleted += 1
+              print(f"Deleted cache {cache['id']} ({cache['key']}), last accessed {cache['lastAccessedAt']}")
+
+          print(f"Deleted {deleted} cache(s) older than {int(max_age.total_seconds() // 3600)} hours.")
+          PY
