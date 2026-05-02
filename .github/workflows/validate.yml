@@ -173,7 +173,7 @@ jobs:
           fi
 
       - name: Verify existing release tag
-        if: steps.release_state.outputs.tag_exists == 'true'
+        if: steps.release_state.outputs.release_exists == 'false' && steps.release_state.outputs.tag_exists == 'true'
         env:
           TAG: ${{ steps.version.outputs.tag }}
           TAG_TARGET: ${{ steps.release_state.outputs.tag_target }}
