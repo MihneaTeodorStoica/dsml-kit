@@ -30,6 +30,15 @@
 - Build validation image: `docker build -f images/base/Dockerfile --build-arg DSML_REQUIREMENTS=requirements-full.txt -t dsml-kit:validate .`.
 - Maintainer validation: `uv run dsml dev validate`.
 
+## Versioning
+
+- Use semantic versions in the form `X.Y.Z`.
+- Increment `X` for breaking changes, including backwards-incompatible CLI, config, profile, runtime, or packaging behavior.
+- Increment `Y` for backwards-compatible features or behavior changes.
+- Increment `Z` for bug fixes, documentation-only release fixes, dependency maintenance, or other backwards-compatible patch work.
+- Keep `pyproject.toml` as the package version source of truth. Release tags must be named `vX.Y.Z` and must match the package version at the tagged commit.
+- Publish only after validation has passed, from matching `v*` tags that are signed and GitHub-verified.
+
 ## Architecture Rules
 
 - Keep Docker command construction out of `cli.py`; make command builders testable without Docker.

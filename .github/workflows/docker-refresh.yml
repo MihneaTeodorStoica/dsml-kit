@@ -95,7 +95,11 @@ jobs:
         id: image
         run: echo "name=${GHCR_IMAGE,,}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push ${{ matrix.variant }} daily image
+      - name: Set refresh date tag
+        id: date
+        run: echo "tag=$(date -u +'%y-%m-%d')" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push ${{ matrix.variant }} refresh image
         id: build
         uses: docker/build-push-action@v7
         with:
@@ -106,13 +110,13 @@ jobs:
             DSML_REQUIREMENTS=${{ matrix.requirements }}
           push: true
           tags: |
-            ${{ steps.image.outputs.name }}:${{ matrix.variant }}-daily
+            ${{ steps.image.outputs.name }}:${{ matrix.variant }}-${{ steps.date.outputs.tag }}
           cache-from: type=gha,scope=docker-image-${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=docker-image-${{ matrix.variant }}
           provenance: false
           sbom: true
 
-      - name: Attest ${{ matrix.variant }} daily image provenance
+      - name: Attest ${{ matrix.variant }} refresh image provenance
         uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ steps.image.outputs.name }}
