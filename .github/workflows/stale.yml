@@ -1,0 +1,41 @@
+name: Mark Stale Issues And Pull Requests
+
+on:
+  schedule:
+    - cron: "38 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  stale:
+    name: Mark stale activity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Mark stale issues and pull requests
+        uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-label: no-issue-activity
+          stale-pr-label: no-pr-activity
+          stale-issue-message: >-
+            This issue has been quiet for a while. It will be closed in 14 days
+            unless there is new information or maintainer activity.
+          stale-pr-message: >-
+            This pull request has been quiet for a while. It will be closed in
+            14 days unless it is updated or a maintainer keeps it open.
+          close-issue-message: >-
+            Closing because this issue stayed inactive after being marked stale.
+          close-pr-message: >-
+            Closing because this pull request stayed inactive after being marked stale.
+          exempt-issue-labels: "security,help wanted,good first issue"
+          exempt-pr-labels: "security,dependencies"
+          operations-per-run: 100

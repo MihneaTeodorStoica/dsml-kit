@@ -1,0 +1,35 @@
+python:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/**/*.py"
+          - "tests/**/*.py"
+          - "pyproject.toml"
+          - "uv.lock"
+
+github_actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/dependabot.yml"
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "pyproject.toml"
+          - "uv.lock"
+          - "images/base/requirements*.txt"
+          - ".github/dependabot.yml"
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "*.md"
+          - ".github/agents/**"
+
+enhancement:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/**"
+          - "profiles/**"
+          - "images/**"
+

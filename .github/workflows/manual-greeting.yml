@@ -1,0 +1,23 @@
+name: Manual Greeting
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: Person to greet
+        default: World
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  greet:
+    name: Send greeting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send greeting
+        run: echo "Hello ${{ inputs.name }}"
+

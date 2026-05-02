@@ -1,0 +1,32 @@
+name: Greetings
+
+on:
+  issues:
+  pull_request_target:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  greeting:
+    name: Greet first-time contributors
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send first interaction greeting
+        uses: actions/first-interaction@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-message: >-
+            Thanks for opening your first dsml-kit issue. Please include your OS,
+            Docker version, the command you ran, and any relevant `dsml.yml`
+            snippets or logs so we can reproduce it quickly.
+          pr-message: >-
+            Thanks for opening your first dsml-kit pull request. Please make
+            sure `uv run pytest tests/unit` passes locally and note any Docker
+            or integration checks you were able to run.
+
