@@ -1,5 +1,5 @@
 .env
-dsml.toml
+dsml.yml
 .dsml/
 .venv/
 .pytest_cache/
