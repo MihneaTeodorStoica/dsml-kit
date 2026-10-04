@@ -1,5 +1,9 @@
 # dsml-kit
 
+> **Obsolete — superseded by [nitro-ai-judge-cli](https://github.com/MihneaTeodorStoica/nitro-ai-judge-cli).**
+> This repository is archived and is no longer maintained. Use nitro-ai-judge-cli
+> for new work; the documentation below is retained for historical reference.
+
 Profile-based Dockerized JupyterLab workspaces for data science and machine
 learning.
 
